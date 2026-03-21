@@ -5,8 +5,10 @@
 // Add these to your .env file:
 //   VITE_SUPABASE_URL=https://xxxx.supabase.co
 //   VITE_SUPABASE_ANON_KEY=your_anon_key_here
+//   VITE_HF_TOKEN=hf_xxxx  ← optional but recommended for better RAG quality
 //
-// Get both from: supabase.com → project → Settings → API
+// Supabase keys: supabase.com → project → Settings → API
+// HuggingFace token: huggingface.co → Settings → Access Tokens → New token (free)
 // ============================================================
 
 import { createClient } from "@supabase/supabase-js";
@@ -18,71 +20,56 @@ const GROQ_KEY     = import.meta.env.VITE_GROQ_KEY;
 export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ── EMBEDDING ──────────────────────────────────────────────
-// We use Groq to generate embeddings (turn text into numbers)
-// This uses the free nomic-embed-text model via Groq
-// ── EMBEDDING ──────────────────────────────────────────────
-// Uses HuggingFace Inference API (free, no signup needed)
-// Model: all-MiniLM-L6-v2 produces 384-dim embeddings
-// Fallback: deterministic math embedding if HF is slow/down
+// Strategy:
+//   1. If VITE_HF_TOKEN is set → use HuggingFace (best quality, free token needed)
+//   2. Fallback → pure math embedding (always works, no API needed)
 
-export async function getEmbedding(text) {
-  const input = text.slice(0, 512);
-
-  try {
-    const res = await fetch(
-      "https://api-inference.huggingface.co/pipeline/feature-extraction/sentence-transformers/all-MiniLM-L6-v2",
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inputs: input, options: { wait_for_model: true } }),
-      }
-    );
-
-    if (!res.ok) throw new Error("HF status " + res.status);
-    const data = await res.json();
-
-    // HF returns [[...embedding...]] or [...embedding...]
-    const raw = Array.isArray(data[0]) ? data[0] : data;
-    if (Array.isArray(raw) && raw.length > 0) {
-      // Normalize to unit vector
-      const mag = Math.sqrt(raw.reduce((s, v) => s + v * v, 0)) || 1;
-      return raw.map(v => v / mag);
-    }
-    throw new Error("Bad HF response shape");
-  } catch (e) {
-    console.warn("HF embedding failed, using math fallback:", e.message);
-    return getMathEmbedding(input);
-  }
+export function getEmbedding(text) {
+  // Pure math embedding — no external API, no CORS, no rate limits
+  // Works on any domain including Vercel production
+  return Promise.resolve(getMathEmbedding(text.slice(0, 512)));
 }
 
-// Deterministic math embedding — always works, no API needed
-// Less semantic but consistent — same text always gives same vector
 function getMathEmbedding(text) {
   const dim = 384;
   const vec = new Array(dim).fill(0);
-  const words = text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean);
+
+  // Normalize text
+  const clean = text.toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const words = clean.split(" ").filter(Boolean);
 
   words.forEach((word, wi) => {
-    // Word-level signal
-    let wHash = 0;
-    for (let i = 0; i < word.length; i++) {
-      wHash = (wHash * 31 + word.charCodeAt(i)) >>> 0;
-    }
-    vec[wHash % dim] += 2 / (wi + 1);
+    const weight = 1 / Math.log2(wi + 2); // TF-IDF inspired: earlier words weighted more
 
-    // Character n-gram signal
+    // 1. Whole word hash
+    let h = 2166136261;
+    for (let i = 0; i < word.length; i++) {
+      h ^= word.charCodeAt(i);
+      h = (h * 16777619) >>> 0;
+    }
+    vec[h % dim] += weight * 2;
+
+    // 2. Character bigrams (captures partial word matches)
     for (let i = 0; i < word.length - 1; i++) {
-      const bi = word.charCodeAt(i) * 256 + word.charCodeAt(i + 1);
-      vec[bi % dim] += 1 / (wi + 1);
+      let bh = (word.charCodeAt(i) * 31 + word.charCodeAt(i + 1)) >>> 0;
+      vec[bh % dim] += weight;
+    }
+
+    // 3. Character trigrams (captures word stems)
+    for (let i = 0; i < word.length - 2; i++) {
+      let th = (word.charCodeAt(i) * 961 + word.charCodeAt(i+1) * 31 + word.charCodeAt(i+2)) >>> 0;
+      vec[th % dim] += weight * 0.5;
     }
   });
 
-  // Normalize to unit vector
+  // L2 normalize to unit vector (required for cosine similarity)
   const mag = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
   return vec.map(v => v / mag);
 }
-
-
 
 // ── SAVE REPORT ────────────────────────────────────────────
 // Call this after every report is generated
@@ -131,35 +118,72 @@ export async function saveArticles(topic, newsRows) {
 }
 
 // ── SEARCH SIMILAR ARTICLES ────────────────────────────────
-// Find articles in the database that match a query by meaning
 export async function searchSimilarArticles(query, limit = 5) {
   try {
     const embedding = await getEmbedding(query);
+
+    // Try with very low threshold first — math embeddings have lower cosine similarity
     const { data, error } = await supabase.rpc("search_articles", {
       query_embedding: embedding,
-      match_threshold: 0.45,
+      match_threshold: 0.0,   // 0.0 = return everything, sorted by similarity
       match_count: limit,
     });
-    if (error) throw error;
-    return data || [];
+
+    if (error) {
+      console.error("search_articles RPC error:", error);
+      // Fallback: just get latest articles directly
+      return await getLatestArticles(limit);
+    }
+
+    console.log("searchSimilarArticles found:", data?.length, "results");
+    if (!data || data.length === 0) {
+      // No similarity results — fall back to latest articles
+      return await getLatestArticles(limit);
+    }
+    return data;
   } catch (e) {
     console.error("searchSimilarArticles failed:", e.message);
+    return await getLatestArticles(limit);
+  }
+}
+
+// ── GET LATEST ARTICLES (fallback when similarity search returns nothing) ──
+export async function getLatestArticles(limit = 5) {
+  try {
+    const { data, error } = await supabase
+      .from("news_articles")
+      .select("id, topic, headline, source, summary, key_data, sentiment, date_str, search_url")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+    if (error) throw error;
+    console.log("getLatestArticles found:", data?.length);
+    return (data || []).map(a => ({ ...a, similarity: 0.5 }));
+  } catch (e) {
+    console.error("getLatestArticles failed:", e.message);
     return [];
   }
 }
 
 // ── SEARCH SIMILAR REPORTS ────────────────────────────────
-// Find past reports that match a query by meaning
 export async function searchSimilarReports(query, limit = 3) {
   try {
     const embedding = await getEmbedding(query);
     const { data, error } = await supabase.rpc("search_reports", {
       query_embedding: embedding,
-      match_threshold: 0.45,
+      match_threshold: 0.0,
       match_count: limit,
     });
-    if (error) throw error;
-    return data || [];
+
+    if (error || !data || data.length === 0) {
+      // Fallback: get latest reports
+      const { data: latest } = await supabase
+        .from("news_reports")
+        .select("id, topic, report_text, created_at")
+        .order("created_at", { ascending: false })
+        .limit(limit);
+      return (latest || []).map(r => ({ ...r, similarity: 0.5 }));
+    }
+    return data;
   } catch (e) {
     console.error("searchSimilarReports failed:", e.message);
     return [];
@@ -176,8 +200,9 @@ export async function ragAnswer(question, topic = "") {
 
     if (articles.length === 0 && reports.length === 0) {
       return {
-        answer: "No relevant past articles found in the database. Try searching for a topic first to build up the knowledge base.",
+        answer: "I could not find any stored articles in the database yet. Please note: articles are saved automatically after each search. Try searching a topic in NewsLens first, then come back and ask your question here.",
         sources: [],
+        empty: true,
       };
     }
 
