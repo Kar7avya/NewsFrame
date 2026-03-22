@@ -24,13 +24,11 @@ export default function App() {
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0 1.5rem",
       }}>
-        {/* Logo */}
         <div onClick={() => setPage("home")}
           style={{ fontFamily: "'Instrument Serif',serif", fontSize: "1.2rem", letterSpacing: "-.01em", cursor: "pointer" }}>
           News<em style={{ fontStyle: "italic", color: "#1d4ed8" }}>Lens</em>
         </div>
 
-        {/* Nav links */}
         <div style={{ display: "flex", gap: 4, overflowX: "auto" }}>
 
           <button onClick={() => setPage("home")}
@@ -49,8 +47,6 @@ export default function App() {
             ✍️ Essay
             <span style={{ fontSize: 10, background: "#1d4ed8", color: "#fff", padding: "1px 5px", borderRadius: 100, fontWeight: 700 }}>IAS</span>
           </button>
-
-         
 
           <button onClick={() => setPage("hindu")}
             style={{ padding: "6px 14px", borderRadius: 100, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all .15s", background: page === "hindu" ? "#1c1917" : "transparent", color: page === "hindu" ? "#fff" : "#57534e", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
@@ -72,7 +68,6 @@ export default function App() {
         {page === "essay" && (
           <EssayPage />
         )}
-     
         {page === "hindu" && (
           <HinduDigest />
         )}
