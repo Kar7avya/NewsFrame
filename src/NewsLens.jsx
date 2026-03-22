@@ -1,6 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { saveReport, saveArticles, autoCleanupIfNeeded } from "./supabase";
-import RAGChat from "./RAGChat";
 import { Chart, registerables } from "chart.js";
 Chart.register(...registerables);
 
@@ -421,10 +419,6 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
   }, [query]);
 
   // Auto-cleanup on load
-  useEffect(() => {
-    try { autoCleanupIfNeeded(90); } catch(e) {}
-  }, []);
-
   // Auto-search when coming from Trending page
   useEffect(() => {
     if (initialQuery) {
@@ -467,9 +461,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
       ],
     });
 
-    // Save to Supabase for RAG — articles stored for future RAG chat
-    saveReport(q, text);
-    saveArticles(q, newsRows);
+    // Supabase RAG disabled
   }
 
   return (
@@ -730,11 +722,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             <WorldMap locations={report.locations} />
           </div>
 
-          {/* RAG Chat */}
-          <div style={{marginBottom:"1.5rem"}}>
-            <SLabel>Ask AI about this report</SLabel>
-            <RAGChat topic={report.query} />
-          </div>
+
 
           {/* Takeaway */}
           {report.takeaway && (
@@ -752,7 +740,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
 
       {/* ElevenLabs widget */}
       <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 200 }}>
-        <elevenlabs-convai agent-id="agent_4601km5fj0xnf9qbwjm292ttpw3x" />
+        <elevenlabs-convai agent-id="agent_4601km5fj0xnf9qbwjm292ttpw3x"></elevenlabs-convai>
       </div>
     </div>
   );
