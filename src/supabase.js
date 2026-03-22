@@ -88,34 +88,128 @@ export async function saveReport(topic, reportText) {
   }
 }
 
+// ── HELPERS FOR ENRICHING ARTICLES ───────────────────────
+
+function inferSourceCountry(source) {
+  const s = source.toLowerCase();
+  if (s.includes("times of india") || s.includes("hindustan times") ||
+      s.includes("the hindu") || s.includes("india today") ||
+      s.includes("economic times")) return "India";
+  if (s.includes("bbc")) return "UK";
+  if (s.includes("cnn") || s.includes("washington times") ||
+      s.includes("new york times")) return "USA";
+  if (s.includes("al jazeera")) return "Qatar";
+  return "International";
+}
+
+function inferCategory(headline, summary) {
+  const text = (headline + " " + summary).toLowerCase();
+  if (text.match(/election|parliament|minister|government|policy|BJP|congress|modi|political/))
+    return "Politics";
+  if (text.match(/GDP|economy|inflation|budget|market|stock|rupee|trade|fiscal/))
+    return "Economy";
+  if (text.match(/cricket|IPL|football|sports|olympic|tournament|match|player/))
+    return "Sports";
+  if (text.match(/AI|tech|startup|digital|cyber|app|software|space|science/))
+    return "Technology";
+  if (text.match(/army|war|border|defence|security|military|attack|terror/))
+    return "Defence";
+  if (text.match(/climate|environment|pollution|flood|drought|disaster|weather/))
+    return "Environment";
+  if (text.match(/health|covid|disease|hospital|medicine|vaccine|doctor/))
+    return "Health";
+  if (text.match(/court|law|constitution|rights|justice|verdict|judge/))
+    return "Legal";
+  if (text.match(/china|pakistan|usa|russia|UN|international|global|world/))
+    return "International";
+  return "General";
+}
+
+function inferGSPaper(headline, summary, category) {
+  const text = (headline + " " + summary).toLowerCase();
+  const papers = [];
+  if (text.match(/history|culture|heritage|art|society|tradition/)) papers.push("GS1");
+  if (text.match(/government|polity|constitution|parliament|policy|governance|international|UN|treaty/))
+    papers.push("GS2");
+  if (text.match(/economy|agriculture|infrastructure|environment|technology|disaster|security|defence/))
+    papers.push("GS3");
+  if (text.match(/ethics|integrity|corruption|attitude|moral|value|civil service/))
+    papers.push("GS4");
+  return papers.length > 0 ? papers.join(", ") : "GS2, GS3";
+}
+
+function inferImportance(headline, summary, source) {
+  let score = 5;
+  const text = (headline + " " + summary).toLowerCase();
+  // Boost for major topics
+  if (text.match(/supreme court|parliament|prime minister|president|RBI|budget/)) score += 2;
+  if (text.match(/war|crisis|emergency|major|landmark|historic/)) score += 2;
+  if (text.match(/india|national|government/)) score += 1;
+  // Boost for reliable sources
+  if (source.toLowerCase().match(/bbc|new york times|the hindu|al jazeera/)) score += 1;
+  // Clamp 1-10
+  return Math.min(10, Math.max(1, score));
+}
+
+function extractTags(headline, summary, category, gsPaper) {
+  const text = (headline + " " + summary).toLowerCase();
+  const tags = [category];
+  if (gsPaper) gsPaper.split(",").forEach(p => tags.push(p.trim()));
+  // Extract key entities as tags
+  const entities = [
+    "India", "China", "Pakistan", "USA", "Russia", "Modi", "BJP", "Congress",
+    "RBI", "Supreme Court", "Parliament", "Budget", "GDP", "Climate",
+  ];
+  entities.forEach(e => { if (text.includes(e.toLowerCase())) tags.push(e); });
+  return [...new Set(tags)].slice(0, 8); // max 8 unique tags
+}
+
 // ── SAVE ARTICLES ──────────────────────────────────────────
-// Call this with the parsed news rows from a report
+// Saves enriched articles with all metadata fields
 export async function saveArticles(topic, newsRows) {
   try {
-    const rows = await Promise.all(
-      newsRows.map(async (row) => {
-        const text = `${row.headline} ${row.summary} ${row.keydata}`;
-        const embedding = await getEmbedding(text);
-        return {
-          topic,
-          headline:   row.headline,
-          source:     row.source,
-          summary:    row.summary,
-          key_data:   row.keydata,
-          sentiment:  row.sentiment,
-          date_str:   row.date,
-          search_url: row.searchUrl || "",
-          embedding,
-        };
-      })
-    );
+    // Process one at a time to avoid rate limits on embedding
+    const rows = [];
+    for (const row of newsRows) {
+      const fullText = [row.headline, row.summary, row.keydata].filter(Boolean).join(". ");
+      const embedding = await getEmbedding(fullText);
+
+      const category      = inferCategory(row.headline, row.summary);
+      const sourceCountry = inferSourceCountry(row.source);
+      const gsPaper       = inferGSPaper(row.headline, row.summary, category);
+      const importance    = inferImportance(row.headline, row.summary, row.source);
+      const tags          = extractTags(row.headline, row.summary, category, gsPaper);
+      const wordCount     = fullText.split(" ").length;
+
+      rows.push({
+        topic,
+        headline:       row.headline,
+        source:         row.source,
+        source_country: sourceCountry,
+        summary:        row.summary,
+        full_text:      fullText,
+        key_data:       row.keydata,
+        sentiment:      row.sentiment,
+        date_str:       row.date,
+        search_url:     row.searchUrl || "",
+        category,
+        gs_paper:       gsPaper,
+        importance,
+        tags,
+        word_count:     wordCount,
+        reading_time:   Math.ceil(wordCount / 200), // avg reading speed
+        embedding,
+      });
+    }
+
     const { error } = await supabase.from("news_articles").insert(rows);
     if (error) console.error("Save articles error:", error);
-    else console.log(`${rows.length} articles saved to Supabase ✓`);
+    else console.log(`${rows.length} enriched articles saved to Supabase ✓`);
   } catch (e) {
     console.error("saveArticles failed:", e.message);
   }
 }
+
 
 // ── SEARCH SIMILAR ARTICLES ────────────────────────────────
 export async function searchSimilarArticles(query, limit = 5) {
@@ -206,11 +300,20 @@ export async function ragAnswer(question, topic = "") {
       };
     }
 
-    // 2. Build context from retrieved content
+    // 2. Build rich context from retrieved content
     const context = [
-      ...articles.map(a => `[${a.source} — ${a.date_str}]\nHeadline: ${a.headline}\nSummary: ${a.summary}\nData: ${a.key_data}`),
-      ...reports.map(r => `[Past report on: ${r.topic}]\n${r.report_text.slice(0, 800)}`),
-    ].join("\n\n---\n\n");
+      ...articles.map(a => [
+        `[${a.source} (${a.source_country || "Intl"}) — ${a.date_str}]`,
+        `Headline: ${a.headline}`,
+        a.summary    ? `Summary: ${a.summary}` : "",
+        a.key_data   ? `Key Data: ${a.key_data}` : "",
+        a.full_text  ? `Context: ${a.full_text.slice(0, 300)}` : "",
+        a.gs_paper   ? `GS Paper: ${a.gs_paper}` : "",
+        a.tags?.length ? `Tags: ${a.tags.join(", ")}` : "",
+        `Importance: ${a.importance || 5}/10 | Sentiment: ${a.sentiment || "Neutral"}`,
+      ].filter(Boolean).join("\n")),
+      ...reports.map(r => `[Past report: ${r.topic}]\n${r.report_text.slice(0, 600)}`),
+    ].join("\n\n---\n\n")    .join("\n\n---\n\n");
 
     // 3. Ask Groq to answer using only this context
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
@@ -245,5 +348,123 @@ ${context}`,
     };
   } catch (e) {
     return { answer: "Error: " + e.message, sources: [] };
+  }
+}
+
+// ── ARTICLE EXPIRY & DB STATS ─────────────────────────────
+
+// Get database stats — how many articles, topics, oldest/newest
+export async function getRAGStats() {
+  try {
+    const { data, error } = await supabase.rpc("get_rag_stats");
+    if (error) throw error;
+    return data;
+  } catch (e) {
+    // Fallback — manual count if RPC not set up yet
+    try {
+      const { count: articleCount } = await supabase
+        .from("news_articles")
+        .select("*", { count: "exact", head: true });
+
+      const { count: reportCount } = await supabase
+        .from("news_reports")
+        .select("*", { count: "exact", head: true });
+
+      const { data: oldest } = await supabase
+        .from("news_articles")
+        .select("created_at, topic")
+        .order("created_at", { ascending: true })
+        .limit(1);
+
+      const { data: newest } = await supabase
+        .from("news_articles")
+        .select("created_at, topic")
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      return {
+        total_articles:  articleCount || 0,
+        total_reports:   reportCount || 0,
+        oldest_article:  oldest?.[0]?.created_at || null,
+        newest_article:  newest?.[0]?.created_at || null,
+        unique_topics:   "—",
+      };
+    } catch (e2) {
+      console.error("getRAGStats failed:", e2.message);
+      return null;
+    }
+  }
+}
+
+// Manually trigger cleanup of old articles
+// daysToKeep: how many days of articles to keep (default 90)
+export async function cleanupOldArticles(daysToKeep = 90) {
+  try {
+    const { data, error } = await supabase.rpc("cleanup_old_articles", {
+      days_to_keep: daysToKeep,
+    });
+    if (error) throw error;
+    console.log("Cleanup result:", data);
+    return data;
+  } catch (e) {
+    // Fallback — direct delete if RPC not available
+    try {
+      const cutoff = new Date();
+      cutoff.setDate(cutoff.getDate() - daysToKeep);
+      const cutoffStr = cutoff.toISOString();
+
+      const { count: artCount, error: e1 } = await supabase
+        .from("news_articles")
+        .delete()
+        .lt("created_at", cutoffStr);
+
+      const { count: repCount, error: e2 } = await supabase
+        .from("news_reports")
+        .delete()
+        .lt("created_at", cutoffStr);
+
+      if (e1 || e2) throw e1 || e2;
+
+      const result = {
+        articles_deleted: artCount || 0,
+        reports_deleted:  repCount || 0,
+        cutoff_date:      cutoffStr,
+        ran_at:           new Date().toISOString(),
+      };
+      console.log("Cleanup done:", result);
+      return result;
+    } catch (e2) {
+      console.error("cleanupOldArticles failed:", e2.message);
+      return null;
+    }
+  }
+}
+
+// Auto-cleanup — call this on app startup once per day
+// Stores last cleanup time in localStorage to avoid running too often
+export async function autoCleanupIfNeeded(daysToKeep = 90) {
+  try {
+    const STORAGE_KEY = "newslens_last_cleanup";
+    const lastCleanup = localStorage.getItem(STORAGE_KEY);
+    const now = Date.now();
+    const ONE_DAY = 24 * 60 * 60 * 1000;
+
+    if (lastCleanup && now - parseInt(lastCleanup) < ONE_DAY) {
+      return null; // Already ran cleanup today
+    }
+
+    const result = await cleanupOldArticles(daysToKeep);
+    if (result) {
+      localStorage.setItem(STORAGE_KEY, now.toString());
+      if (result.articles_deleted > 0 || result.reports_deleted > 0) {
+        console.log(
+          `Auto-cleanup: removed ${result.articles_deleted} articles and ${result.reports_deleted} reports older than ${daysToKeep} days`
+        );
+      }
+    }
+    return result;
+  } catch (e) {
+    console.error("autoCleanupIfNeeded failed:", e.message);
+    return null;
   }
 }

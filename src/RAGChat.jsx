@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { ragAnswer, searchSimilarArticles } from "./supabase";
- 
+import { ragAnswer, searchSimilarArticles, getRAGStats, cleanupOldArticles } from "./supabase";
+
 // ============================================================
 // RAGChat.jsx — Drop this anywhere in your report page
 // Usage: <RAGChat topic={report.query} />
 // ============================================================
- 
+
 function Message({ msg }) {
   const isUser = msg.role === "user";
   return (
@@ -32,7 +32,7 @@ function Message({ msg }) {
     </div>
   );
 }
- 
+
 function TypingIndicator() {
   return (
     <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 12 }}>
@@ -44,7 +44,7 @@ function TypingIndicator() {
     </div>
   );
 }
- 
+
 export default function RAGChat({ topic }) {
   const [messages, setMessages] = useState([
     {
@@ -56,18 +56,32 @@ export default function RAGChat({ topic }) {
   const [loading, setLoading] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [articleCount, setArticleCount] = useState(0);
+  const [stats, setStats] = useState(null);
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanResult, setCleanResult] = useState(null);
   const bottomRef = useRef(null);
- 
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
- 
+
   useEffect(() => {
     if (topic) {
       searchSimilarArticles(topic, 20).then(articles => setArticleCount(articles.length));
     }
+    getRAGStats().then(s => setStats(s));
   }, [topic]);
- 
+
+  async function handleCleanup() {
+    setCleaning(true);
+    setCleanResult(null);
+    const result = await cleanupOldArticles(90);
+    setCleaning(false);
+    setCleanResult(result);
+    // Refresh stats after cleanup
+    getRAGStats().then(s => setStats(s));
+  }
+
   async function send() {
     const q = input.trim();
     if (!q || loading) return;
@@ -78,14 +92,14 @@ export default function RAGChat({ topic }) {
     setLoading(false);
     setMessages(m => [...m, { role: "assistant", content: answer, sources }]);
   }
- 
+
   return (
     <>
       <style>{`
         @keyframes bounce { 0%,60%,100% { transform:translateY(0); } 30% { transform:translateY(-6px); } }
         @keyframes slideUp { from { opacity:0; transform:translateY(20px); } to { opacity:1; transform:translateY(0); } }
       `}</style>
- 
+
       {/* ── TOGGLE BUTTON ── */}
       <button
         onClick={() => setIsOpen(o => !o)}
@@ -105,7 +119,7 @@ export default function RAGChat({ topic }) {
           </span>
         )}
       </button>
- 
+
       {/* ── CHAT PANEL ── */}
       {isOpen && (
         <div style={{
@@ -127,14 +141,14 @@ export default function RAGChat({ topic }) {
             </div>
             <button onClick={() => setIsOpen(false)} style={{ background: "none", border: "none", color: "#a8a29e", cursor: "pointer", fontSize: 18, lineHeight: 1 }}>×</button>
           </div>
- 
+
           {/* Messages */}
           <div style={{ height: 340, overflowY: "auto", padding: "16px 16px 8px" }}>
             {messages.map((m, i) => <Message key={i} msg={m} />)}
             {loading && <TypingIndicator />}
             <div ref={bottomRef} />
           </div>
- 
+
           {/* Suggestions */}
           <div style={{ padding: "0 12px 8px", display: "flex", gap: 6, flexWrap: "wrap" }}>
             {["Which source was most critical?", "What key data was mentioned?", "Summarise in 2 sentences"].map(s => (
@@ -144,7 +158,40 @@ export default function RAGChat({ topic }) {
               </button>
             ))}
           </div>
- 
+
+          {/* DB Stats panel */}
+          {stats && (
+            <div style={{ padding: "8px 12px", borderTop: "1px solid #f1f0ec", background: "#fafaf9" }}>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 10, flex: 1, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono',monospace", color: "#57534e" }}>
+                    📦 <strong style={{ color: "#1c1917" }}>{stats.total_articles}</strong> articles
+                  </span>
+                  <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono',monospace", color: "#57534e" }}>
+                    🗂️ <strong style={{ color: "#1c1917" }}>{stats.unique_topics || "—"}</strong> topics
+                  </span>
+                  {stats.oldest_article && (
+                    <span style={{ fontSize: 11, fontFamily: "'JetBrains Mono',monospace", color: "#a8a29e" }}>
+                      oldest: {new Date(stats.oldest_article).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "2-digit" })}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={handleCleanup}
+                  disabled={cleaning}
+                  title="Delete articles older than 90 days"
+                  style={{ fontSize: 10, padding: "3px 9px", borderRadius: 100, border: "1px solid #e8e6e1", background: cleaning ? "#f5f4f2" : "#fff", color: cleaning ? "#a8a29e" : "#b91c1c", cursor: cleaning ? "not-allowed" : "pointer", fontFamily: "'JetBrains Mono',monospace", whiteSpace: "nowrap" }}>
+                  {cleaning ? "Cleaning..." : "🗑️ Cleanup >90d"}
+                </button>
+              </div>
+              {cleanResult && (
+                <div style={{ marginTop: 5, fontSize: 11, color: "#15803d", fontFamily: "'JetBrains Mono',monospace" }}>
+                  ✓ Removed {cleanResult.articles_deleted} articles + {cleanResult.reports_deleted} reports older than 90 days
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Input */}
           <div style={{ padding: "8px 12px 12px", display: "flex", gap: 8, borderTop: "1px solid #f1f0ec" }}>
             <input

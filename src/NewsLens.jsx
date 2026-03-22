@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { saveReport, saveArticles } from "./supabase";
+import { saveReport, saveArticles, autoCleanupIfNeeded } from "./supabase";
 import RAGChat from "./RAGChat";
 import { Chart, registerables } from "chart.js";
 Chart.register(...registerables);
@@ -11,10 +11,15 @@ const GROQ_KEY = import.meta.env.VITE_GROQ_KEY;
 
 const SYSTEM_PROMPT = `You are a professional news research agent. For every query, search ONLY these 5 sources and report ONLY on the exact topic asked:
 1. Times of India (timesofindia.com)
-2. India Today (indiatoday.in)
+2. Hindustan Times (hindustantimes.com)
 3. The Hindu (thehindu.com)
-4. The Economic Times (economictimes.indiatimes.com)
+4. Al Jazeera (aljazeera.com)
 5. BBC News (bbc.com/news)
+6. CNN (cnn.com)
+7. Washington Times (washingtontimes.com)
+8. New York Times (nytimes.com)
+9. India Today (indiatoday.in)
+10. The Economic Times (economictimes.indiatimes.com)
 
 Produce this EXACT structure:
 
@@ -46,10 +51,15 @@ SECTION 3 — CHART DATA
 
 SECTION 4 — WHAT EACH SOURCE SAID
 - Times of India: [summary]
-- India Today: [summary]
+- Hindustan Times: [summary]
 - The Hindu: [summary]
-- Economic Times: [summary]
+- Al Jazeera: [summary]
 - BBC News: [summary]
+- CNN: [summary]
+- Washington Times: [summary]
+- New York Times: [summary]
+- India Today: [summary]
+- Economic Times: [summary]
 
 SECTION 5 — KEY TAKEAWAY
 [3 clear sentences in simple language]
@@ -61,8 +71,10 @@ SOURCE: [Name] | HEADLINE: [headline] | URL: [url] | DATE: [date]
 RULES:
 - Report ONLY on the exact topic asked. Never switch.
 - Never say "I cannot" — always produce all sections.
+- Cover ALL 10 sources — at least 8 headlines in the news table.
 - Fill all 4 chart types with real data.
-- Keep language simple and professional.`;
+- Keep language simple and professional.
+- Include both Indian and international perspectives from the sources.`;
 
 // ── HELPERS ──────────────────────────────────────────────
 function extractSection(text, start, end) {
@@ -88,14 +100,24 @@ function getSearchUrl(srcName, headline) {
   const words = headline.split(" ").slice(0, 5).join(" ");
   if (s.includes("times of india") || s.includes("toi"))
     return `https://timesofindia.indiatimes.com/topic/${encodeURIComponent(words)}`;
+  if (s.includes("hindustan times") || s.includes("ht "))
+    return `https://www.hindustantimes.com/search?q=${encodeURIComponent(headline)}`;
   if (s.includes("india today"))
     return `https://www.indiatoday.in/search?query=${encodeURIComponent(headline)}`;
-  if (s.includes("hindu"))
+  if (s.includes("the hindu") || (s.includes("hindu") && !s.includes("hindustan")))
     return `https://www.thehindu.com/search/?q=${encodeURIComponent(headline)}`;
-  if (s.includes("economic"))
+  if (s.includes("economic times") || s.includes("economic"))
     return `https://economictimes.indiatimes.com/topic/${encodeURIComponent(words)}`;
+  if (s.includes("al jazeera") || s.includes("aljazeera"))
+    return `https://www.aljazeera.com/search/${encodeURIComponent(headline)}`;
   if (s.includes("bbc"))
     return `https://www.bbc.com/search?q=${encodeURIComponent(headline)}`;
+  if (s.includes("cnn"))
+    return `https://edition.cnn.com/search?q=${encodeURIComponent(headline)}`;
+  if (s.includes("washington times"))
+    return `https://www.washingtontimes.com/search/?q=${encodeURIComponent(headline)}`;
+  if (s.includes("new york times") || s.includes("nyt"))
+    return `https://www.nytimes.com/search?query=${encodeURIComponent(headline)}`;
   return `https://www.google.com/search?q=${encodeURIComponent(srcName + " " + headline)}`;
 }
 
@@ -139,7 +161,12 @@ function parseSourceLinks(s6text) {
 }
 
 function parseSources(s4text) {
-  const names = ["Times of India", "India Today", "The Hindu", "Economic Times", "BBC News"];
+  const names = [
+    "Times of India", "Hindustan Times", "The Hindu",
+    "Al Jazeera", "BBC News", "CNN",
+    "Washington Times", "New York Times",
+    "India Today", "Economic Times",
+  ];
   return names.map((name) => {
     const re = new RegExp(`-\\s*${name}:([^\\n-]+)`, "i");
     const m = s4text?.match(re);
@@ -152,7 +179,7 @@ function projectLatLng(lat, lng) {
 }
 
 const STATUS_MSGS = [
-  "Searching Times of India, The Hindu, India Today, Economic Times, BBC...",
+  "Searching TOI, HT, Hindu, Al Jazeera, BBC, CNN, NYT, India Today, ET...",
   "Extracting headlines, data and key points...",
   "Building tables, charts and location data...",
   "Finalising your report...",
@@ -343,6 +370,11 @@ function WorldMap({ locations }) {
 export default function NewsLens({ initialQuery = "", onQueryUsed }) {
   const [query, setQuery] = useState("");
 
+  // Run auto-cleanup once per day on app load
+  useEffect(() => {
+    autoCleanupIfNeeded(90);
+  }, []);
+
   // Auto-search when coming from Trending page
   useEffect(() => {
     if (initialQuery) {
@@ -388,7 +420,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
         const e = await res.json().catch(() => ({}));
         const m = e.error?.message || `HTTP ${res.status}`;
         if (res.status === 401) throw new Error("Invalid Groq key — check console.groq.com/keys");
-        if (res.status === 429) throw new Error("Rate limit — wait a moment and try again");
+        if (res.status === 429) throw new Error("Rate limit hit — Groq allows 30 req/min on free plan. Wait 30 seconds and try again.");
         throw new Error(m);
       }
 
@@ -428,8 +460,10 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
       charts: chartData,
       locations: chartData?.locations || [
         { name: "New Delhi", lat: 28.6, lng: 77.2, note: "India capital" },
-        { name: "Mumbai", lat: 19.08, lng: 72.88, note: "Financial hub" },
         { name: "London", lat: 51.5, lng: -0.13, note: "BBC HQ" },
+        { name: "Washington DC", lat: 38.9, lng: -77.0, note: "CNN & Washington Times" },
+        { name: "Doha", lat: 25.28, lng: 51.52, note: "Al Jazeera HQ" },
+        { name: "New York", lat: 40.71, lng: -74.0, note: "New York Times" },
       ],
     });
 
@@ -459,7 +493,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
           News<em style={{ fontStyle: "italic", color: "#1d4ed8" }}>Lens</em>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
-          {["TOI", "India Today", "The Hindu", "Economic Times", "BBC"].map(s => (
+          {["TOI", "HT", "Hindu", "Al Jazeera", "BBC", "CNN", "Wash. Times", "NYT", "India Today", "ET"].map(s => (
             <span key={s} style={{ fontSize: 10.5, fontFamily: "'JetBrains Mono',monospace", color: "#a8a29e", background: "#fafaf9", border: "1px solid #e8e6e1", padding: "3px 9px", borderRadius: 100 }}>{s}</span>
           ))}
         </div>
@@ -487,7 +521,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             <input
               value={query} onChange={e => setQuery(e.target.value)}
               onKeyDown={e => e.key === "Enter" && startSearch()}
-              placeholder="e.g. scams of BJP vs Congress, petrol price, India GDP..."
+              placeholder="e.g. India-Pakistan relations, climate change, India economy 2025..."
               style={{ flex: 1, padding: ".85rem 1.1rem", border: "none", outline: "none", fontFamily: "Inter,sans-serif", fontSize: ".95rem", background: "transparent", color: "#1c1917" }}
             />
             <button onClick={() => startSearch()} disabled={loading}
@@ -540,7 +574,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             <div>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "#a8a29e", marginBottom: ".4rem" }}>NewsLens Report</div>
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "clamp(1.5rem,3vw,2.1rem)", letterSpacing: "-.02em", lineHeight: 1.2, textTransform: "capitalize" }}>{report.query}</div>
-              <div style={{ fontSize: 12, color: "#a8a29e", marginTop: ".35rem", fontFamily: "'JetBrains Mono',monospace" }}>{report.generatedAt} · TOI, India Today, The Hindu, ET, BBC</div>
+              <div style={{ fontSize: 12, color: "#a8a29e", marginTop: ".35rem", fontFamily: "'JetBrains Mono',monospace" }}>{report.generatedAt} · TOI, HT, Hindu, Al Jazeera, BBC, CNN, NYT, ET</div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="no-print" onClick={() => { setReport(null); setQuery(""); }}
@@ -658,7 +692,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
 
           {/* Source Coverage */}
           <SLabel>What each source reported</SLabel>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(180px,1fr))", gap: "1rem", marginBottom: "1.5rem" }}>
             {report.sources.map(src => (
               <div key={src.name} style={{ background: "#fff", border: "1px solid #e8e6e1", borderRadius: 10, padding: "1rem 1.1rem" }}>
                 <div style={{ fontSize: 10.5, fontFamily: "'JetBrains Mono',monospace", letterSpacing: ".05em", fontWeight: 500, color: "#1d4ed8", marginBottom: ".4rem", textTransform: "uppercase" }}>{src.name}</div>
