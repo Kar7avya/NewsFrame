@@ -288,7 +288,7 @@ function Skeleton() {
   );
 }
 
-export default function HinduDigest() {
+export default function Hindudigest() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [section, setSection] = useState("all");
   const [loading, setLoading] = useState(false);

@@ -2,7 +2,7 @@ import { useState } from "react";
 import NewsLens from "./NewsLens";
 import TrendingPage from "./TrendingPage";
 import EssayPage from "./EssayPage";
-import HinduDigest from "./HinduDigest";
+import HinduDigest from "./Hindudigest";
 
 export default function App() {
   const [page, setPage] = useState("home");

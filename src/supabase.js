@@ -105,7 +105,7 @@ function getMathEmbedding(text) {
   });
 
   // L2 normalize to unit vector (required for cosine similarity)
-  const mag = Math.sqrt(vec.reduce((s, v) => s + v * v, 0)) || 1;
+  const mag = Math.sqrt(vec.reduce((acc, v) => acc + v * v, 0)) || 1;
   return vec.map(v => v / mag);
 }
 
@@ -405,6 +405,7 @@ export async function getRAGStats() {
   } catch (e) {
     // Fallback — manual count if RPC not set up yet
     try {
+      if (!supabase) return null;
       const { count: articleCount } = await supabase
         .from("news_articles")
         .select("*", { count: "exact", head: true });
