@@ -17,7 +17,9 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 const GROQ_KEY     = import.meta.env.VITE_GROQ_KEY;
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+export const supabase = SUPABASE_URL && SUPABASE_KEY
+  ? createClient(SUPABASE_URL, SUPABASE_KEY)
+  : null;
 
 // ── EMBEDDING ──────────────────────────────────────────────
 // Strategy:
@@ -112,6 +114,7 @@ function getMathEmbedding(text) {
 export async function saveReport(topic, reportText) {
   try {
     const embedding = await getEmbedding(topic + " " + reportText.slice(0, 500));
+    if (!supabase) return;
     const { error } = await supabase.from("news_reports").insert({
       topic,
       report_text: reportText,
@@ -238,6 +241,7 @@ export async function saveArticles(topic, newsRows) {
       });
     }
 
+    if (!supabase) return;
     const { error } = await supabase.from("news_articles").insert(rows);
     if (error) console.error("Save articles error:", error);
     else console.log(`${rows.length} enriched articles saved to Supabase ✓`);
@@ -253,6 +257,7 @@ export async function searchSimilarArticles(query, limit = 5) {
     const embedding = await getEmbedding(query);
 
     // Try with very low threshold first — math embeddings have lower cosine similarity
+    if (!supabase) return [];
     const { data, error } = await supabase.rpc("search_articles", {
       query_embedding: embedding,
       match_threshold: 0.0,   // 0.0 = return everything, sorted by similarity
@@ -298,6 +303,7 @@ export async function getLatestArticles(limit = 5) {
 export async function searchSimilarReports(query, limit = 3) {
   try {
     const embedding = await getEmbedding(query);
+    if (!supabase) return [];
     const { data, error } = await supabase.rpc("search_reports", {
       query_embedding: embedding,
       match_threshold: 0.0,
@@ -392,6 +398,7 @@ ${context}`,
 // Get database stats — how many articles, topics, oldest/newest
 export async function getRAGStats() {
   try {
+    if (!supabase) return [];
     const { data, error } = await supabase.rpc("get_rag_stats");
     if (error) throw error;
     return data;
@@ -436,6 +443,7 @@ export async function getRAGStats() {
 // daysToKeep: how many days of articles to keep (default 90)
 export async function cleanupOldArticles(daysToKeep = 90) {
   try {
+    if (!supabase) return [];
     const { data, error } = await supabase.rpc("cleanup_old_articles", {
       days_to_keep: daysToKeep,
     });
@@ -478,24 +486,21 @@ export async function cleanupOldArticles(daysToKeep = 90) {
 
 // Auto-cleanup — call this on app startup once per day
 // Stores last cleanup time in localStorage to avoid running too often
+// In-memory cleanup tracker — resets on page reload (safe alternative to localStorage)
+let _lastCleanupTime = 0;
+
 export async function autoCleanupIfNeeded(daysToKeep = 90) {
   try {
-    const STORAGE_KEY = "newslens_last_cleanup";
-    const lastCleanup = localStorage.getItem(STORAGE_KEY);
     const now = Date.now();
     const ONE_DAY = 24 * 60 * 60 * 1000;
-
-    if (lastCleanup && now - parseInt(lastCleanup) < ONE_DAY) {
-      return null; // Already ran cleanup today
+    if (_lastCleanupTime && now - _lastCleanupTime < ONE_DAY) {
+      return null; // Already ran cleanup this session
     }
-
     const result = await cleanupOldArticles(daysToKeep);
     if (result) {
-      localStorage.setItem(STORAGE_KEY, now.toString());
+      _lastCleanupTime = now;
       if (result.articles_deleted > 0 || result.reports_deleted > 0) {
-        console.log(
-          `Auto-cleanup: removed ${result.articles_deleted} articles and ${result.reports_deleted} reports older than ${daysToKeep} days`
-        );
+        console.log(`Auto-cleanup: removed ${result.articles_deleted} articles older than ${daysToKeep} days`);
       }
     }
     return result;
