@@ -369,20 +369,6 @@ function WorldMap({ locations }) {
 // ── MAIN APP ─────────────────────────────────────────────
 export default function NewsLens({ initialQuery = "", onQueryUsed }) {
   const [query, setQuery] = useState("");
-
-  // Run auto-cleanup once per day on app load
-  useEffect(() => {
-    autoCleanupIfNeeded(90);
-  }, []);
-
-  // Auto-search when coming from Trending page
-  useEffect(() => {
-    if (initialQuery) {
-      setQuery(initialQuery);
-      startSearch(initialQuery);
-      if (onQueryUsed) onQueryUsed();
-    }
-  }, [initialQuery]);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [error, setError] = useState("");
@@ -433,6 +419,20 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
       setError(err.message);
     }
   }, [query]);
+
+  // Auto-cleanup on load
+  useEffect(() => {
+    try { autoCleanupIfNeeded(90); } catch(e) {}
+  }, []);
+
+  // Auto-search when coming from Trending page
+  useEffect(() => {
+    if (initialQuery) {
+      setQuery(initialQuery);
+      startSearch(initialQuery);
+      if (onQueryUsed) onQueryUsed();
+    }
+  }, [initialQuery]);
 
   function parseAndSetReport(q, text) {
     const s0 = extractSection(text, "SECTION 0", "SECTION 1");
