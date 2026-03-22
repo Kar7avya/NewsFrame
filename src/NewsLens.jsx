@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { saveReport, saveArticles, autoCleanupIfNeeded } from "./supabase";
+import RAGChat from "./RAGChat";
 import { Chart, registerables } from "chart.js";
 Chart.register(...registerables);
 
@@ -367,6 +369,20 @@ function WorldMap({ locations }) {
 // ── MAIN APP ─────────────────────────────────────────────
 export default function NewsLens({ initialQuery = "", onQueryUsed }) {
   const [query, setQuery] = useState("");
+
+  // Run auto-cleanup once per day on app load
+  useEffect(() => {
+    autoCleanupIfNeeded(90);
+  }, []);
+
+  // Auto-search when coming from Trending page
+  useEffect(() => {
+    if (initialQuery) {
+      setQuery(initialQuery);
+      startSearch(initialQuery);
+      if (onQueryUsed) onQueryUsed();
+    }
+  }, [initialQuery]);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [error, setError] = useState("");
@@ -418,16 +434,6 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
     }
   }, [query]);
 
-  // Auto-cleanup on load
-  // Auto-search when coming from Trending page
-  useEffect(() => {
-    if (initialQuery) {
-      setQuery(initialQuery);
-      startSearch(initialQuery);
-      if (onQueryUsed) onQueryUsed();
-    }
-  }, [initialQuery]);
-
   function parseAndSetReport(q, text) {
     const s0 = extractSection(text, "SECTION 0", "SECTION 1");
     const s1 = extractSection(text, "SECTION 1", "SECTION 2");
@@ -461,7 +467,9 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
       ],
     });
 
-    // Supabase RAG disabled
+    // Save to Supabase for RAG — articles stored for future RAG chat
+    saveReport(q, text);
+    saveArticles(q, newsRows);
   }
 
   return (
@@ -722,7 +730,11 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             <WorldMap locations={report.locations} />
           </div>
 
-
+          {/* RAG Chat */}
+          <div style={{marginBottom:"1.5rem"}}>
+            <SLabel>Ask AI about this report</SLabel>
+            <RAGChat topic={report.query} />
+          </div>
 
           {/* Takeaway */}
           {report.takeaway && (
@@ -740,7 +752,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
 
       {/* ElevenLabs widget */}
       <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 200 }}>
-        <elevenlabs-convai agent-id="agent_4601km5fj0xnf9qbwjm292ttpw3x"></elevenlabs-convai>
+        <elevenlabs-convai agent-id="agent_4601km5fj0xnf9qbwjm292ttpw3x" />
       </div>
     </div>
   );
