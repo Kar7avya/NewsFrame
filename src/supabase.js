@@ -24,10 +24,46 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 //   1. If VITE_HF_TOKEN is set → use HuggingFace (best quality, free token needed)
 //   2. Fallback → pure math embedding (always works, no API needed)
 
-export function getEmbedding(text) {
-  // Pure math embedding — no external API, no CORS, no rate limits
-  // Works on any domain including Vercel production
-  return Promise.resolve(getMathEmbedding(text.slice(0, 512)));
+// Edge Function URL — set this after deploying
+// Format: https://YOUR_PROJECT_REF.supabase.co/functions/v1/embed
+const EDGE_FUNCTION_URL = import.meta.env.VITE_SUPABASE_EMBED_URL || "";
+
+export async function getEmbedding(text) {
+  const input = text.slice(0, 512);
+
+  // Try Supabase Edge Function first (server-side HuggingFace — no CORS)
+  try {
+    if (SUPABASE_URL) {
+      const edgeUrl = `${SUPABASE_URL}/functions/v1/embed`;
+      const res = await fetch(edgeUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${SUPABASE_KEY}`,
+        },
+        body: JSON.stringify({ text: input }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.embedding && Array.isArray(data.embedding) && data.embedding.length > 0) {
+          if (data.source === "huggingface") {
+            console.log("Embedding: HuggingFace ✓ high accuracy");
+          } else {
+            console.log("Embedding: math fallback via Edge Function");
+          }
+          return data.embedding;
+        }
+      } else {
+        console.warn("Edge Function returned", res.status, "— using local math fallback");
+      }
+    }
+  } catch (e) {
+    console.warn("Edge Function unreachable:", e.message, "— using local math");
+  }
+
+  // Local math fallback — always works, no external API needed
+  return getMathEmbedding(input);
 }
 
 function getMathEmbedding(text) {
@@ -313,7 +349,7 @@ export async function ragAnswer(question, topic = "") {
         `Importance: ${a.importance || 5}/10 | Sentiment: ${a.sentiment || "Neutral"}`,
       ].filter(Boolean).join("\n")),
       ...reports.map(r => `[Past report: ${r.topic}]\n${r.report_text.slice(0, 600)}`),
-    ].join("\n\n---\n\n")    .join("\n\n---\n\n");
+    ].join("\n\n---\n\n");
 
     // 3. Ask Groq to answer using only this context
     const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {

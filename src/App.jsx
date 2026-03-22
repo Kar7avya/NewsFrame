@@ -2,7 +2,7 @@ import { useState } from "react";
 import NewsLens from "./NewsLens";
 import TrendingPage from "./trendingpage";
 import EssayPage from "./EssayPage";
- 
+import HinduDigest from "./Hindudigest";
 export default function App() {
   const [page, setPage] = useState("home"); // "home" | "trending" | "essay"
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,6 +80,10 @@ export default function App() {
         )}
         {page === "essay" && (
           <EssayPage />
+        )}
+
+        {page === "hindu" && (
+          <HinduDigest />
         )}
       </div>
  
