@@ -3,10 +3,11 @@ import NewsLens from "./NewsLens";
 import TrendingPage from "./TrendingPage";
 import EssayPage from "./EssayPage";
 import HinduDigest from "./Hindudigest";
+import StoryWeb from "./StoryWeb";
 import NewspaperIntelligence from "./NewspaperIntelligence";
 
 export default function App() {
-  const [page, setPage] = useState("home");
+  const [page, setPage] = useState("home"); // home|trending|newspaper|essay|hindu|storyweb
   const [searchQuery, setSearchQuery] = useState("");
 
   function handleTrendingSearch(topic) {
@@ -57,6 +58,11 @@ export default function App() {
             📰 The Hindu
             <span style={{ fontSize: 10, background: "#dc2626", color: "#fff", padding: "1px 5px", borderRadius: 100, fontWeight: 700 }}>DAILY</span>
           </button>
+          <button onClick={() => setPage("storyweb")}
+            style={{ padding: "6px 14px", borderRadius: 100, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 500, transition: "all .15s", background: page === "storyweb" ? "#1c1917" : "transparent", color: page === "storyweb" ? "#fff" : "#57534e", display: "flex", alignItems: "center", gap: 5, whiteSpace: "nowrap" }}>
+            🕸️ Story Web
+            <span style={{ fontSize: 10, background: "#7c3aed", color: "#fff", padding: "1px 5px", borderRadius: 100, fontWeight: 700 }}>NEW</span>
+          </button>
         </div>
       </nav>
 
@@ -66,6 +72,7 @@ export default function App() {
         {page === "newspaper" && <NewspaperIntelligence />}
         {page === "essay" && <EssayPage />}
         {page === "hindu" && <HinduDigest />}
+        {page === "storyweb" && <StoryWeb />}
       </div>
     </div>
   );
