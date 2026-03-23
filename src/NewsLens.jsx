@@ -539,19 +539,37 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             ))}
           </div>
 
-          {/* GLOBE */}
-          <div style={{ position:"relative", zIndex:10, width:"100%", maxWidth:700, marginBottom:"2rem" }}>
-            {/* Glow behind globe */}
-            <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:320, height:320, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,255,255,.06) 0%, transparent 70%)", pointerEvents:"none" }} />
-            <div style={{ width:"100%", display:"flex", justifyContent:"center", height:200, position:"relative", overflow:"hidden" }}>
-              <img
-                src="https://blocks.mvp-subha.me/assets/earth.png"
-                alt="Globe"
-                style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", height:280, width:"auto", opacity:0.7, filter:"grayscale(100%) brightness(1.4) contrast(1.1)", animation:"float 6s ease-in-out infinite" }}
-              />
-              {/* Fade bottom */}
-              <div style={{ position:"absolute", bottom:0, left:0, right:0, height:80, background:"linear-gradient(to top, #000, transparent)", zIndex:2 }} />
+          {/* GLOBE — CSS drawn, always works */}
+          <div style={{ position:"relative", zIndex:10, width:260, height:260, marginBottom:"2rem", animation:"float 6s ease-in-out infinite" }}>
+            {/* Outer glow */}
+            <div style={{ position:"absolute", inset:-30, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,255,255,.04) 0%, transparent 70%)" }} />
+            {/* Globe sphere */}
+            <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"radial-gradient(circle at 35% 35%, rgba(255,255,255,.12) 0%, rgba(255,255,255,.04) 40%, rgba(0,0,0,.6) 100%)", border:"1px solid rgba(255,255,255,.12)", overflow:"hidden", boxShadow:"0 0 60px rgba(255,255,255,.04), inset 0 0 40px rgba(0,0,0,.8)" }}>
+              {/* Latitude lines */}
+              {[15,30,45,60,75,90,105,120,135,150].map((top, i) => (
+                <div key={i} style={{ position:"absolute", left:0, right:0, top:`${top}px`, height:"1px", background:"rgba(255,255,255,.08)", borderRadius:1 }} />
+              ))}
+              {/* Longitude lines */}
+              {[0,26,52,78,104,130,156,182,208,234].map((left, i) => (
+                <div key={i} style={{ position:"absolute", top:0, bottom:0, left:`${left}px`, width:"1px", background:"rgba(255,255,255,.06)", borderRadius:1 }} />
+              ))}
+              {/* Continent blobs */}
+              <div style={{ position:"absolute", top:60, left:80, width:70, height:45, borderRadius:"60% 40% 55% 45%", background:"rgba(255,255,255,.13)" }} />
+              <div style={{ position:"absolute", top:80, left:30, width:45, height:55, borderRadius:"45% 55% 40% 60%", background:"rgba(255,255,255,.1)" }} />
+              <div style={{ position:"absolute", top:50, left:165, width:55, height:50, borderRadius:"50% 50% 45% 55%", background:"rgba(255,255,255,.11)" }} />
+              <div style={{ position:"absolute", top:120, left:100, width:60, height:40, borderRadius:"55% 45% 60% 40%", background:"rgba(255,255,255,.09)" }} />
+              <div style={{ position:"absolute", top:140, left:55, width:35, height:50, borderRadius:"40% 60% 45% 55%", background:"rgba(255,255,255,.08)" }} />
+              <div style={{ position:"absolute", top:30, left:120, width:40, height:30, borderRadius:"50%", background:"rgba(255,255,255,.07)" }} />
+              {/* Highlight */}
+              <div style={{ position:"absolute", top:20, left:50, width:80, height:60, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,255,255,.12) 0%, transparent 70%)" }} />
             </div>
+            {/* Orbit ring */}
+            <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%) rotateX(75deg)", width:310, height:310, borderRadius:"50%", border:"1px solid rgba(255,255,255,.08)" }} />
+            <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%) rotateX(75deg) rotateZ(30deg)", width:340, height:340, borderRadius:"50%", border:"1px dashed rgba(255,255,255,.04)" }} />
+            {/* Orbit dot */}
+            <div style={{ position:"absolute", top:10, left:"50%", transform:"translateX(-50%)", width:6, height:6, borderRadius:"50%", background:"#fff", boxShadow:"0 0 8px #fff, 0 0 16px rgba(255,255,255,.5)" }} />
+            {/* Fade bottom */}
+            <div style={{ position:"absolute", bottom:-2, left:-10, right:-10, height:80, background:"linear-gradient(to top, #000, transparent)", zIndex:2 }} />
           </div>
 
           {/* Source pills */}
