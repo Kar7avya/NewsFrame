@@ -539,37 +539,56 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             ))}
           </div>
 
-          {/* GLOBE — CSS drawn, always works */}
-          <div style={{ position:"relative", zIndex:10, width:260, height:260, marginBottom:"2rem", animation:"float 6s ease-in-out infinite" }}>
-            {/* Outer glow */}
-            <div style={{ position:"absolute", inset:-30, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,255,255,.04) 0%, transparent 70%)" }} />
-            {/* Globe sphere */}
-            <div style={{ position:"absolute", inset:0, borderRadius:"50%", background:"radial-gradient(circle at 35% 35%, rgba(255,255,255,.12) 0%, rgba(255,255,255,.04) 40%, rgba(0,0,0,.6) 100%)", border:"1px solid rgba(255,255,255,.12)", overflow:"hidden", boxShadow:"0 0 60px rgba(255,255,255,.04), inset 0 0 40px rgba(0,0,0,.8)" }}>
-              {/* Latitude lines */}
-              {[15,30,45,60,75,90,105,120,135,150].map((top, i) => (
-                <div key={i} style={{ position:"absolute", left:0, right:0, top:`${top}px`, height:"1px", background:"rgba(255,255,255,.08)", borderRadius:1 }} />
-              ))}
-              {/* Longitude lines */}
-              {[0,26,52,78,104,130,156,182,208,234].map((left, i) => (
-                <div key={i} style={{ position:"absolute", top:0, bottom:0, left:`${left}px`, width:"1px", background:"rgba(255,255,255,.06)", borderRadius:1 }} />
-              ))}
-              {/* Continent blobs */}
-              <div style={{ position:"absolute", top:60, left:80, width:70, height:45, borderRadius:"60% 40% 55% 45%", background:"rgba(255,255,255,.13)" }} />
-              <div style={{ position:"absolute", top:80, left:30, width:45, height:55, borderRadius:"45% 55% 40% 60%", background:"rgba(255,255,255,.1)" }} />
-              <div style={{ position:"absolute", top:50, left:165, width:55, height:50, borderRadius:"50% 50% 45% 55%", background:"rgba(255,255,255,.11)" }} />
-              <div style={{ position:"absolute", top:120, left:100, width:60, height:40, borderRadius:"55% 45% 60% 40%", background:"rgba(255,255,255,.09)" }} />
-              <div style={{ position:"absolute", top:140, left:55, width:35, height:50, borderRadius:"40% 60% 45% 55%", background:"rgba(255,255,255,.08)" }} />
-              <div style={{ position:"absolute", top:30, left:120, width:40, height:30, borderRadius:"50%", background:"rgba(255,255,255,.07)" }} />
-              {/* Highlight */}
-              <div style={{ position:"absolute", top:20, left:50, width:80, height:60, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,255,255,.12) 0%, transparent 70%)" }} />
-            </div>
-            {/* Orbit ring */}
-            <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%) rotateX(75deg)", width:310, height:310, borderRadius:"50%", border:"1px solid rgba(255,255,255,.08)" }} />
-            <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%) rotateX(75deg) rotateZ(30deg)", width:340, height:340, borderRadius:"50%", border:"1px dashed rgba(255,255,255,.04)" }} />
-            {/* Orbit dot */}
-            <div style={{ position:"absolute", top:10, left:"50%", transform:"translateX(-50%)", width:6, height:6, borderRadius:"50%", background:"#fff", boxShadow:"0 0 8px #fff, 0 0 16px rgba(255,255,255,.5)" }} />
-            {/* Fade bottom */}
-            <div style={{ position:"absolute", bottom:-2, left:-10, right:-10, height:80, background:"linear-gradient(to top, #000, transparent)", zIndex:2 }} />
+          {/* WORLD MAP — SVG flat map like Image 1 */}
+          <div style={{ position:"relative", zIndex:10, width:"100%", maxWidth:720, marginBottom:"2rem", animation:"float 7s ease-in-out infinite" }}>
+            <svg viewBox="0 0 1000 500" xmlns="http://www.w3.org/2000/svg" style={{ width:"100%", height:"auto", opacity:0.85 }}>
+              {/* Ocean background */}
+              <rect width="1000" height="500" fill="#000" />
+              {/* North America */}
+              <path d="M120,60 L180,55 L220,70 L240,90 L230,120 L210,140 L200,170 L180,190 L160,210 L140,230 L120,250 L100,240 L90,220 L80,200 L85,175 L80,155 L90,135 L95,110 L100,85 Z" fill="white" opacity="0.9"/>
+              {/* Greenland */}
+              <path d="M195,20 L230,15 L250,25 L245,45 L225,55 L200,50 L190,38 Z" fill="white" opacity="0.85"/>
+              {/* Central America */}
+              <path d="M140,248 L155,255 L160,270 L150,278 L138,268 Z" fill="white" opacity="0.85"/>
+              {/* South America */}
+              <path d="M155,280 L185,270 L210,280 L225,310 L230,345 L220,380 L205,410 L185,430 L165,435 L148,420 L138,395 L135,360 L140,325 L145,300 Z" fill="white" opacity="0.9"/>
+              {/* Europe */}
+              <path d="M430,55 L470,50 L495,58 L505,70 L500,90 L480,100 L460,105 L440,98 L425,85 L420,70 Z" fill="white" opacity="0.9"/>
+              {/* UK */}
+              <path d="M408,60 L418,55 L422,68 L412,75 L405,68 Z" fill="white" opacity="0.85"/>
+              {/* Scandinavia */}
+              <path d="M450,28 L470,22 L480,35 L475,52 L460,55 L448,45 Z" fill="white" opacity="0.85"/>
+              {/* Africa */}
+              <path d="M440,115 L490,108 L520,118 L535,140 L540,175 L535,215 L525,255 L510,290 L490,315 L470,325 L450,318 L432,295 L422,260 L418,220 L420,180 L425,145 Z" fill="white" opacity="0.9"/>
+              {/* Middle East */}
+              <path d="M515,105 L550,100 L575,112 L578,135 L560,148 L535,145 L515,132 Z" fill="white" opacity="0.85"/>
+              {/* Russia/Central Asia */}
+              <path d="M490,30 L580,20 L680,25 L740,35 L760,50 L740,65 L700,72 L650,70 L600,75 L565,72 L530,65 L500,58 Z" fill="white" opacity="0.88"/>
+              {/* South Asia - India */}
+              <path d="M580,115 L620,110 L645,125 L650,155 L640,185 L620,205 L600,210 L582,195 L572,168 L570,140 Z" fill="white" opacity="0.9"/>
+              {/* China/East Asia */}
+              <path d="M640,60 L720,55 L765,68 L775,90 L760,115 L730,125 L695,120 L660,112 L640,95 L632,78 Z" fill="white" opacity="0.9"/>
+              {/* Southeast Asia */}
+              <path d="M700,130 L740,125 L760,140 L755,165 L735,175 L710,168 L695,150 Z" fill="white" opacity="0.85"/>
+              {/* Japan */}
+              <path d="M785,75 L800,70 L808,82 L800,95 L786,90 Z" fill="white" opacity="0.85"/>
+              {/* Indonesia */}
+              <path d="M700,190 L730,185 L755,192 L760,205 L740,212 L710,208 Z" fill="white" opacity="0.82"/>
+              <path d="M765,195 L790,190 L800,200 L792,212 L768,208 Z" fill="white" opacity="0.8"/>
+              {/* Australia */}
+              <path d="M720,310 L790,300 L840,315 L855,345 L848,378 L825,398 L790,405 L755,398 L728,375 L715,345 L715,320 Z" fill="white" opacity="0.9"/>
+              {/* New Zealand */}
+              <path d="M865,360 L878,352 L885,368 L876,382 L862,375 Z" fill="white" opacity="0.8"/>
+              {/* Madagascar */}
+              <path d="M542,270 L552,262 L560,278 L555,298 L544,290 Z" fill="white" opacity="0.8"/>
+              {/* Caribbean */}
+              <path d="M168,220 L178,216 L183,224 L175,230 Z" fill="white" opacity="0.75"/>
+              {/* Iceland */}
+              <path d="M368,38 L385,33 L395,42 L388,54 L370,52 Z" fill="white" opacity="0.8"/>
+            </svg>
+            {/* Fade edges */}
+            <div style={{ position:"absolute", inset:0, background:"radial-gradient(ellipse at center, transparent 50%, #000 90%)", pointerEvents:"none" }} />
+            <div style={{ position:"absolute", bottom:0, left:0, right:0, height:60, background:"linear-gradient(to top, #000, transparent)", pointerEvents:"none" }} />
           </div>
 
           {/* Source pills */}
