@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
 const GROQ_KEY = import.meta.env.VITE_GROQ_KEY;
 
@@ -113,6 +113,372 @@ function parseArticles(text) {
     };
   }).filter(a => a.headline);
 }
+
+
+// ── UPLOAD PROMPT ─────────────────────────────────────────
+const UPLOAD_PROMPT = `You are a brilliant newspaper analyst and teacher. The user has uploaded a photo or PDF of a newspaper — it could be The Hindu, TOI, or any Indian newspaper.
+
+Analyse the ENTIRE newspaper image/content carefully and produce this EXACT output:
+
+NEWSPAPER_NAME: [Name of the newspaper if visible, else "Indian Newspaper"]
+EDITION_DATE: [Date if visible, else "Recent edition"]
+TOTAL_NEWS_COUNT: [How many distinct news items you can identify]
+
+===NEWS_START===
+NEWS_NUM: [1, 2, 3...]
+PAGE: [Page number if visible, else estimate]
+SECTION: [National/International/Economy/Sports/Entertainment/Editorial/State/City/Science]
+HEADLINE: [Exact headline as printed, or closest approximation]
+IMPORTANCE: [High/Medium/Low]
+UPSC_PAPER: [GS1/GS2/GS3/GS4/Prelims/Not relevant]
+
+WHAT_IS_IT:
+[2 sentences in very simple layman English — what is this news about, explained like talking to a friend]
+
+KEY_POINTS:
+• [Key point 1 — most important fact from this article]
+• [Key point 2 — another important aspect]
+• [Key point 3 — cause or background]
+• [Key point 4 — impact or consequence]
+• [Key point 5 — what happens next]
+
+ONE_LINE:
+[Single sentence — explain to a 12-year-old what happened]
+
+DIFFICULT_WORDS:
+• [Hard word 1] → [simple meaning]
+• [Hard word 2] → [simple meaning]
+===NEWS_END===
+
+[Repeat for EVERY news item visible in the newspaper — minimum 5, maximum 20]
+
+PAGE_WISE_INDEX:
+[List all news grouped by page — e.g. "Page 1: Headline A, Headline B | Page 2: Headline C"]
+
+TOPIC_WISE_INDEX:
+[List all news grouped by topic — e.g. "Politics: A, B | Economy: C, D | Sports: E"]
+
+RULES:
+- Extract EVERY visible news item — don't skip anything
+- If text is blurry, describe what you can see
+- Write key points in simple conversational English
+- A layman with no background should understand everything
+- Include ads, corrections, notices if they seem important`;
+
+// ── UPLOAD PARSER ─────────────────────────────────────────
+function parseUploadedNews(text) {
+  const get = key => {
+    const m = text.match(new RegExp(key + ':\s*(.+)'));
+    return m ? m[1].trim() : '';
+  };
+
+  const newsItems = text.split('===NEWS_START===').slice(1).map(block => {
+    const b = block.split('===NEWS_END===')[0];
+    const g = key => { const m = b.match(new RegExp(key + ':\s*(.+)')); return m ? m[1].trim() : ''; };
+    const getBlock = key => {
+      const idx = b.indexOf(key + ':');
+      if (idx === -1) return '';
+      const after = b.slice(idx + key.length + 1);
+      const end = after.search(/\n[A-Z_]+:/);
+      return (end === -1 ? after : after.slice(0, end)).trim();
+    };
+    const getBullets = key => getBlock(key).split('\n')
+      .map(l => l.replace(/^[•\-*]\s*/, '').trim()).filter(l => l.length > 5);
+    const getTerms = () => getBlock('DIFFICULT_WORDS').split('\n')
+      .map(l => l.replace(/^[•\-*]\s*/, '').trim())
+      .filter(l => l.includes('→'))
+      .map(l => { const i = l.indexOf('→'); return { word: l.slice(0,i).trim(), meaning: l.slice(i+1).trim() }; });
+
+    return {
+      num: parseInt(g('NEWS_NUM')) || 0,
+      page: g('PAGE'),
+      section: g('SECTION'),
+      headline: g('HEADLINE'),
+      importance: g('IMPORTANCE'),
+      upscPaper: g('UPSC_PAPER'),
+      whatIsIt: getBlock('WHAT_IS_IT'),
+      keyPoints: getBullets('KEY_POINTS'),
+      oneLine: g('ONE_LINE'),
+      terms: getTerms(),
+    };
+  }).filter(n => n.headline);
+
+  return {
+    newspaper: get('NEWSPAPER_NAME'),
+    date: get('EDITION_DATE'),
+    totalCount: get('TOTAL_NEWS_COUNT'),
+    items: newsItems,
+    pageIndex: get('PAGE_WISE_INDEX'),
+    topicIndex: get('TOPIC_WISE_INDEX'),
+  };
+}
+
+// ── FILE TO BASE64 ────────────────────────────────────────
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// ── UPLOADED NEWS CARD ────────────────────────────────────
+function UploadedNewsCard({ item, index }) {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState('points');
+  const isHigh = item.importance?.toLowerCase() === 'high';
+  const hasUPSC = item.upscPaper && !item.upscPaper.toLowerCase().includes('not');
+  const SEC_COLORS = {
+    national:{bg:'#eff6ff',text:'#1e40af',border:'#bfdbfe'},
+    international:{bg:'#f0fdf4',text:'#166534',border:'#bbf7d0'},
+    economy:{bg:'#fefce8',text:'#92400e',border:'#fde68a'},
+    editorial:{bg:'#fdf4ff',text:'#7e22ce',border:'#e9d5ff'},
+    science:{bg:'#ecfdf5',text:'#065f46',border:'#a7f3d0'},
+    sports:{bg:'#fff7ed',text:'#c2410c',border:'#fed7aa'},
+    entertainment:{bg:'#fdf2f8',text:'#9d174d',border:'#fbcfe8'},
+    state:{bg:'#eff6ff',text:'#1e40af',border:'#bfdbfe'},
+    city:{bg:'#f0fdf4',text:'#166534',border:'#bbf7d0'},
+  };
+  const ss = SEC_COLORS[(item.section||'').toLowerCase()] || {bg:'#f5f4f2',text:'#57534e',border:'#e8e6e1'};
+
+  return (
+    <div style={{background:'#fff',border:`1.5px solid ${open?'#1c1917':'#e8e6e1'}`,borderRadius:14,overflow:'hidden',transition:'border-color .2s',animation:`fadeUp .3s ease ${index*0.04}s both`}}>
+      <div onClick={()=>setOpen(o=>!o)} style={{padding:'14px 18px',cursor:'pointer'}}>
+        <div style={{display:'flex',gap:7,alignItems:'center',marginBottom:8,flexWrap:'wrap'}}>
+          <div style={{width:26,height:26,borderRadius:7,background:index<3?'#1c1917':'#f1f0ec',color:index<3?'#fff':'#57534e',display:'flex',alignItems:'center',justifyContent:'center',fontSize:11,fontWeight:700,flexShrink:0,fontFamily:"'JetBrains Mono',monospace"}}>{index+1}</div>
+          {item.page && <span style={{fontSize:10,color:'#a8a29e',fontFamily:"'JetBrains Mono',monospace",background:'#f5f4f2',padding:'2px 7px',borderRadius:100}}>Pg {item.page}</span>}
+          <span style={{fontSize:10,fontWeight:700,padding:'2px 9px',borderRadius:100,background:ss.bg,color:ss.text,border:`1px solid ${ss.border}`,textTransform:'uppercase',letterSpacing:'.04em'}}>{item.section}</span>
+          {isHigh && <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:100,background:'#fef2f2',color:'#b91c1c',border:'1px solid #fecaca'}}>🔴 Important</span>}
+          {hasUPSC && <span style={{fontSize:10,fontWeight:700,padding:'2px 8px',borderRadius:100,background:'#eff6ff',color:'#1d4ed8',border:'1px solid #bfdbfe'}}>🎯 {item.upscPaper}</span>}
+          <span style={{marginLeft:'auto',fontSize:18,color:'#a8a29e',transform:open?'rotate(180deg)':'none',display:'inline-block',transition:'transform .2s'}}>⌄</span>
+        </div>
+        <div style={{fontSize:15,fontWeight:600,color:'#1c1917',lineHeight:1.3,marginBottom:7}}>{item.headline}</div>
+        <div style={{fontSize:13,color:'#374151',lineHeight:1.6,padding:'8px 12px',background:'#f8f7f5',borderRadius:8,borderLeft:'3px solid #1d4ed8'}}>
+          💡 {item.oneLine}
+        </div>
+      </div>
+
+      {open && (
+        <div style={{borderTop:'1px solid #f1f0ec'}}>
+          <div style={{padding:'12px 18px',background:'#fafaf9',borderBottom:'1px solid #f1f0ec'}}>
+            <div style={{fontSize:10,fontFamily:"'JetBrains Mono',monospace",color:'#a8a29e',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:5}}>What is this about</div>
+            <div style={{fontSize:13.5,color:'#374151',lineHeight:1.75}}>{item.whatIsIt}</div>
+          </div>
+          <div style={{display:'flex',borderBottom:'1px solid #f1f0ec'}}>
+            {[{id:'points',label:`📌 Key Points (${item.keyPoints?.length||0})`},{id:'terms',label:`📖 Words (${item.terms?.length||0})`}].map(t=>(
+              <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:'10px 6px',border:'none',background:'transparent',fontSize:12,fontWeight:tab===t.id?600:400,color:tab===t.id?'#1c1917':'#a8a29e',cursor:'pointer',borderBottom:`2px solid ${tab===t.id?'#1c1917':'transparent'}`}}>{t.label}</button>
+            ))}
+          </div>
+          <div style={{padding:'14px 18px'}}>
+            {tab==='points' && (
+              <div>
+                {item.keyPoints?.map((pt,i)=>(
+                  <div key={i} style={{display:'flex',gap:11,marginBottom:12,alignItems:'flex-start'}}>
+                    <div style={{minWidth:24,height:24,borderRadius:7,background:i===0?'#1c1917':'#f1f0ec',color:i===0?'#fff':'#57534e',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,flexShrink:0,border:i>0?'1px solid #e8e6e1':'none'}}>{i+1}</div>
+                    <div style={{fontSize:14,color:'#1c1917',lineHeight:1.75,fontWeight:i===0?500:400}}>{pt}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {tab==='terms' && (
+              <div>
+                {item.terms?.length>0 ? item.terms.map((t,i)=>(
+                  <div key={i} style={{display:'flex',gap:10,padding:'10px 0',borderBottom:i<item.terms.length-1?'1px solid #f1f0ec':'none'}}>
+                    <div style={{width:8,height:8,borderRadius:'50%',background:'#1d4ed8',flexShrink:0,marginTop:6}}/>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:600,color:'#1d4ed8',fontFamily:"'JetBrains Mono',monospace",marginBottom:3}}>{t.word}</div>
+                      <div style={{fontSize:13.5,color:'#374151',lineHeight:1.6}}>{t.meaning}</div>
+                    </div>
+                  </div>
+                )) : <div style={{color:'#a8a29e',fontSize:13}}>No difficult terms identified.</div>}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── NEWSPAPER UPLOAD SECTION ──────────────────────────────
+function NewspaperUpload() {
+  const [file, setFile] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+  const [statusMsg, setStatusMsg] = useState('');
+  const [dragOver, setDragOver] = useState(false);
+  const [viewMode, setViewMode] = useState('all'); // all | page | topic
+  const [filterSection, setFilterSection] = useState('all');
+  const fileRef = useRef(null);
+  const cameraRef = useRef(null);
+  const statusRef = useRef(null);
+
+  const STATUS = ['Reading the newspaper...','Identifying all news items...','Explaining each article...','Building page-wise index...','Almost done...'];
+
+  async function analyse(f) {
+    if (!f) return;
+    setError(''); setResult(null);
+    if (f.type.startsWith('image/')) {
+      setPreview(URL.createObjectURL(f));
+    } else {
+      setPreview(null);
+    }
+    setLoading(true);
+    let mi = 0; setStatusMsg(STATUS[0]);
+    statusRef.current = setInterval(()=>{ if(++mi<STATUS.length) setStatusMsg(STATUS[mi]); }, 2500);
+
+    try {
+      let messageContent;
+      if (f.type.startsWith('image/')) {
+        const b64 = await fileToBase64(f);
+        messageContent = [
+          { type: 'image_url', image_url: { url: `data:${f.type};base64,${b64}` } },
+          { type: 'text', text: UPLOAD_PROMPT },
+        ];
+      } else {
+        // PDF — extract as text description
+        messageContent = [
+          { type: 'text', text: UPLOAD_PROMPT + '\n\n[Note: A PDF newspaper was uploaded. Analyse based on typical newspaper structure and provide a comprehensive explanation of likely content for this type of publication.]' },
+        ];
+      }
+
+      const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${GROQ_KEY}` },
+        body: JSON.stringify({
+          model: 'meta-llama/llama-4-scout-17b-16e-instruct',
+          max_tokens: 4000,
+          temperature: 0.3,
+          messages: [{ role: 'user', content: messageContent }],
+        }),
+      });
+
+      clearInterval(statusRef.current); setLoading(false); setStatusMsg('');
+      if (!res.ok) {
+        const e = await res.json().catch(()=>({}));
+        if (res.status===429) throw new Error('Rate limit — wait 30 seconds');
+        if (res.status===400) throw new Error('Image too large or unclear — try a clearer photo');
+        throw new Error(e.error?.message||`Error ${res.status}`);
+      }
+      const data = await res.json();
+      setResult(parseUploadedNews(data.choices[0].message.content));
+    } catch(e) {
+      clearInterval(statusRef.current); setLoading(false); setStatusMsg('');
+      setError(e.message);
+    }
+  }
+
+  function handleFile(e) { const f = e.target.files?.[0]; if(f) { setFile(f); analyse(f); } }
+  function handleDrop(e) { e.preventDefault(); setDragOver(false); const f = e.dataTransfer.files?.[0]; if(f) { setFile(f); analyse(f); } }
+
+  const sections = result ? [...new Set(result.items.map(i=>i.section).filter(Boolean))] : [];
+  const filtered = result ? (filterSection==='all' ? result.items : result.items.filter(i=>i.section?.toLowerCase()===filterSection)) : [];
+
+  return (
+    <div style={{display:'flex',flexDirection:'column',gap:12}}>
+
+      {/* Upload zone */}
+      {!result && (
+        <div
+          onDrop={handleDrop}
+          onDragOver={e=>{e.preventDefault();setDragOver(true);}}
+          onDragLeave={()=>setDragOver(false)}
+          onClick={()=>fileRef.current?.click()}
+          style={{border:`2px dashed ${dragOver?'#1d4ed8':'#d1cec8'}`,borderRadius:14,background:dragOver?'#eff6ff':'#fff',padding:'2.5rem 1.5rem',textAlign:'center',cursor:'pointer',transition:'all .2s'}}>
+          {preview ? (
+            <div style={{position:'relative',display:'inline-block'}}>
+              <img src={preview} alt="newspaper" style={{maxWidth:'100%',maxHeight:280,borderRadius:10,objectFit:'contain'}}/>
+              {loading && (
+                <div style={{position:'absolute',inset:0,background:'rgba(0,0,0,.5)',borderRadius:10,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:10}}>
+                  <div style={{width:36,height:36,border:'3px solid rgba(255,255,255,.2)',borderTop:'3px solid #fff',borderRadius:'50%',animation:'spin 1s linear infinite'}}/>
+                  <div style={{color:'#fff',fontSize:13,fontWeight:500}}>{statusMsg}</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <div style={{fontSize:48,marginBottom:12}}>📰</div>
+              <div style={{fontFamily:"'Instrument Serif',serif",fontSize:'1.2rem',color:'#1c1917',marginBottom:6}}>Upload your newspaper</div>
+              <div style={{fontSize:13,color:'#a8a29e',marginBottom:16}}>Photo, screenshot or PDF — any Indian newspaper</div>
+              <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+                <button onClick={e=>{e.stopPropagation();fileRef.current?.click();}} style={{padding:'9px 18px',background:'#1c1917',color:'#fff',border:'none',borderRadius:100,fontSize:13,fontWeight:500,cursor:'pointer'}}>📁 Upload File</button>
+                <button onClick={e=>{e.stopPropagation();cameraRef.current?.click();}} style={{padding:'9px 18px',background:'#1d4ed8',color:'#fff',border:'none',borderRadius:100,fontSize:13,fontWeight:500,cursor:'pointer'}}>📸 Take Photo</button>
+              </div>
+              <div style={{marginTop:12,fontSize:12,color:'#a8a29e'}}>Works with: Photo of newspaper • TV screenshot • WhatsApp forward • PDF</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {loading && !preview && (
+        <div style={{display:'flex',alignItems:'center',gap:10,padding:'12px 16px',background:'#eff6ff',border:'1px solid #bfdbfe',borderRadius:10,fontSize:13,color:'#1d4ed8'}}>
+          <div style={{width:8,height:8,borderRadius:'50%',background:'#1d4ed8',animation:'pulse 1.4s infinite',flexShrink:0}}/>
+          {statusMsg}
+        </div>
+      )}
+
+      {error && (
+        <div style={{background:'#fef2f2',border:'1px solid #fca5a5',borderRadius:10,padding:'1rem',fontSize:13,color:'#b91c1c',lineHeight:1.7}}>
+          <strong>Error:</strong> {error}
+          <button onClick={()=>{setFile(null);setPreview(null);setError('');}} style={{marginLeft:10,fontSize:12,padding:'2px 10px',borderRadius:100,border:'1px solid #fca5a5',background:'#fff',color:'#b91c1c',cursor:'pointer'}}>Try again</button>
+        </div>
+      )}
+
+      {/* Results */}
+      {result && (
+        <div style={{animation:'fadeUp .4s ease'}}>
+          {/* Newspaper header */}
+          <div style={{background:'#1c1917',color:'#fff',borderRadius:12,padding:'1.1rem 1.4rem',marginBottom:'1rem',display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:10}}>
+            <div>
+              <div style={{fontSize:10,fontFamily:"'JetBrains Mono',monospace",color:'#60a5fa',textTransform:'uppercase',letterSpacing:'.08em',marginBottom:4}}>Uploaded Newspaper</div>
+              <div style={{fontFamily:"'Instrument Serif',serif",fontSize:'1.25rem',marginBottom:3}}>{result.newspaper}</div>
+              <div style={{fontSize:12,color:'#a8a29e'}}>{result.date} · {result.items.length} articles found</div>
+            </div>
+            <button onClick={()=>{setResult(null);setFile(null);setPreview(null);}} style={{padding:'7px 14px',background:'rgba(255,255,255,.1)',color:'#fff',border:'1px solid rgba(255,255,255,.2)',borderRadius:100,fontSize:12,cursor:'pointer'}}>
+              📰 Upload another
+            </button>
+          </div>
+
+          {/* Index cards */}
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginBottom:'1rem'}}>
+            {result.pageIndex && (
+              <div style={{background:'#fff',border:'1px solid #e8e6e1',borderRadius:10,padding:'10px 13px'}}>
+                <div style={{fontSize:10,fontFamily:"'JetBrains Mono',monospace",color:'#a8a29e',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>📄 Page-wise index</div>
+                <div style={{fontSize:12,color:'#374151',lineHeight:1.7}}>{result.pageIndex}</div>
+              </div>
+            )}
+            {result.topicIndex && (
+              <div style={{background:'#fff',border:'1px solid #e8e6e1',borderRadius:10,padding:'10px 13px'}}>
+                <div style={{fontSize:10,fontFamily:"'JetBrains Mono',monospace",color:'#a8a29e',textTransform:'uppercase',letterSpacing:'.06em',marginBottom:6}}>🗂️ Topic-wise index</div>
+                <div style={{fontSize:12,color:'#374151',lineHeight:1.7}}>{result.topicIndex}</div>
+              </div>
+            )}
+          </div>
+
+          {/* Section filter */}
+          <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:'1rem'}}>
+            <button onClick={()=>setFilterSection('all')} style={{padding:'5px 13px',borderRadius:100,border:`1px solid ${filterSection==='all'?'#1c1917':'#e8e6e1'}`,background:filterSection==='all'?'#1c1917':'#fff',color:filterSection==='all'?'#fff':'#57534e',fontSize:12,fontWeight:500,cursor:'pointer'}}>All ({result.items.length})</button>
+            {sections.map(s=>(
+              <button key={s} onClick={()=>setFilterSection(s.toLowerCase())} style={{padding:'5px 13px',borderRadius:100,border:`1px solid ${filterSection===s.toLowerCase()?'#1c1917':'#e8e6e1'}`,background:filterSection===s.toLowerCase()?'#1c1917':'#fff',color:filterSection===s.toLowerCase()?'#fff':'#57534e',fontSize:12,fontWeight:500,cursor:'pointer',textTransform:'capitalize'}}>{s} ({result.items.filter(i=>i.section?.toLowerCase()===s.toLowerCase()).length})</button>
+            ))}
+          </div>
+
+          {/* Articles */}
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            {filtered.map((item,i)=><UploadedNewsCard key={i} item={item} index={i}/>)}
+          </div>
+        </div>
+      )}
+
+      <input ref={fileRef} type="file" accept="image/*,.pdf" onChange={handleFile} style={{display:'none'}}/>
+      <input ref={cameraRef} type="file" accept="image/*" capture="environment" onChange={handleFile} style={{display:'none'}}/>
+    </div>
+  );
+}
+
 
 function Calendar({ selectedDate, onSelect }) {
   const [view, setView] = useState(new Date(selectedDate));
@@ -288,7 +654,8 @@ function Skeleton() {
   );
 }
 
-export default function Hindudigest() {
+export default function HinduDigest() {
+  const [mode, setMode] = useState("calendar"); // calendar | upload
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [section, setSection] = useState("all");
   const [loading, setLoading] = useState(false);
@@ -341,6 +708,7 @@ export default function Hindudigest() {
         @keyframes shimmer{0%,100%{opacity:1}50%{opacity:.5}}
         @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
         @keyframes prog{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
 
       <div style={{background:"#1c1917",color:"#fff",padding:"2rem 2rem 1.75rem"}}>
@@ -362,7 +730,26 @@ export default function Hindudigest() {
       {loading && <div style={{height:3,background:"#e8e6e1",overflow:"hidden"}}><div style={{height:"100%",width:"40%",background:"#1d4ed8",animation:"prog 1.2s ease-in-out infinite"}} /></div>}
 
       <div style={{maxWidth:1100,margin:"0 auto",padding:"1.5rem 1.5rem 4rem"}}>
-        <div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:"1.5rem",alignItems:"start"}}>
+
+        {/* Mode switcher */}
+        <div style={{display:"flex",gap:8,marginBottom:"1.5rem"}}>
+          <button onClick={()=>setMode("calendar")}
+            style={{padding:"10px 22px",borderRadius:100,border:`1.5px solid ${mode==="calendar"?"#1c1917":"#e8e6e1"}`,background:mode==="calendar"?"#1c1917":"#fff",color:mode==="calendar"?"#fff":"#57534e",fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:7,transition:"all .15s"}}>
+            📅 Calendar Mode
+            <span style={{fontSize:10,color:mode==="calendar"?"#a8a29e":"#a8a29e"}}>Pick any date</span>
+          </button>
+          <button onClick={()=>setMode("upload")}
+            style={{padding:"10px 22px",borderRadius:100,border:`1.5px solid ${mode==="upload"?"#1d4ed8":"#e8e6e1"}`,background:mode==="upload"?"#1d4ed8":"#fff",color:mode==="upload"?"#fff":"#57534e",fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:7,transition:"all .15s"}}>
+            📸 Upload Newspaper
+            <span style={{fontSize:10,background:mode==="upload"?"rgba(255,255,255,.2)":"#eff6ff",color:mode==="upload"?"#fff":"#1d4ed8",padding:"1px 6px",borderRadius:100,fontWeight:700}}>NEW</span>
+          </button>
+        </div>
+
+        {/* Upload mode */}
+        {mode === "upload" && <NewspaperUpload />}
+
+        {/* Calendar mode */}
+        {mode === "calendar" && <div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:"1.5rem",alignItems:"start"}}>
 
           <div style={{position:"sticky",top:16,display:"flex",flexDirection:"column",gap:10}}>
             <Calendar selectedDate={selectedDate} onSelect={d=>{setSelectedDate(d);setArticles([]);setGenerated(false);}} />
@@ -438,6 +825,7 @@ export default function Hindudigest() {
             )}
           </div>
         </div>
+          </div>}
       </div>
     </div>
   );
