@@ -573,7 +573,7 @@ export default function StoryWeb() {
               Every story has causes before it, effects after it, people driving it, and policies shaping it. The Story Web shows them all at once.
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", fontSize: 12.5, color: "#57534e" }}>
-              {["🔴 Causes", "🟢 Effects", "🔵 Related", "🟡 Context", "🟣 People", "🩵 Policies"].map(f => (
+              {["🔴Causes", "🟢 Effects", "🔵 Related", "🟡 Context", "🟣 People", "🩵 Policies"].map(f => (
                 <span key={f} style={{ padding: "5px 12px", borderRadius: 100, background: "#f5f4f2", border: "1px solid #e8e6e1" }}>{f}</span>
               ))}
             </div>
