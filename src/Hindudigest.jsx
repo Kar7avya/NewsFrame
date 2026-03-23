@@ -116,103 +116,114 @@ function parseArticles(text) {
 
 
 // ── UPLOAD PROMPT ─────────────────────────────────────────
-const UPLOAD_PROMPT = `You are a brilliant newspaper analyst and teacher. The user has uploaded a photo or PDF of a newspaper — it could be The Hindu, TOI, or any Indian newspaper.
+const UPLOAD_PROMPT = `You are analysing a newspaper image. Extract and explain EVERY article/news item you can see.
 
-Analyse the ENTIRE newspaper image/content carefully and produce this EXACT output:
+CRITICAL: You MUST use the exact delimiters ===NEWS_START=== and ===NEWS_END=== for each article. Do not skip them.
 
-NEWSPAPER_NAME: [Name of the newspaper if visible, else "Indian Newspaper"]
-EDITION_DATE: [Date if visible, else "Recent edition"]
-TOTAL_NEWS_COUNT: [How many distinct news items you can identify]
+First line must be:
+NEWSPAPER_NAME: [newspaper name or "Indian Newspaper"]
+EDITION_DATE: [date visible or "Recent edition"]
+
+Then for EACH news item you can see, output EXACTLY:
 
 ===NEWS_START===
-NEWS_NUM: [1, 2, 3...]
-PAGE: [Page number if visible, else estimate]
-SECTION: [National/International/Economy/Sports/Entertainment/Editorial/State/City/Science]
-HEADLINE: [Exact headline as printed, or closest approximation]
+NEWS_NUM: 1
+PAGE: [page number or "1"]
+SECTION: [National/World/Economy/Sports/Entertainment/Editorial/Science/City]
+HEADLINE: [the headline of this article]
 IMPORTANCE: [High/Medium/Low]
 UPSC_PAPER: [GS1/GS2/GS3/GS4/Prelims/Not relevant]
-
-WHAT_IS_IT:
-[2 sentences in very simple layman English — what is this news about, explained like talking to a friend]
-
+WHAT_IS_IT: [2 sentences explaining this news in very simple everyday English — like explaining to a friend who reads no news]
 KEY_POINTS:
-• [Key point 1 — most important fact from this article]
-• [Key point 2 — another important aspect]
-• [Key point 3 — cause or background]
-• [Key point 4 — impact or consequence]
-• [Key point 5 — what happens next]
-
-ONE_LINE:
-[Single sentence — explain to a 12-year-old what happened]
-
+• [Most important fact — include numbers/data if visible]
+• [Second important point]
+• [Why this happened — background]
+• [Who is affected and how]
+• [What happens next]
+ONE_LINE: [One sentence a 12-year-old would understand]
 DIFFICULT_WORDS:
-• [Hard word 1] → [simple meaning]
-• [Hard word 2] → [simple meaning]
+• [hard word] → [simple meaning]
+• [hard word] → [simple meaning]
 ===NEWS_END===
 
-[Repeat for EVERY news item visible in the newspaper — minimum 5, maximum 20]
+Repeat ===NEWS_START=== to ===NEWS_END=== for EVERY article. Minimum 3 articles, maximum 20.
 
-PAGE_WISE_INDEX:
-[List all news grouped by page — e.g. "Page 1: Headline A, Headline B | Page 2: Headline C"]
+After all articles:
+PAGE_WISE_INDEX: [e.g. Page 1: Headline A, B | Page 2: Headline C]
+TOPIC_WISE_INDEX: [e.g. Politics: A, B | Economy: C | Sports: D]
 
-TOPIC_WISE_INDEX:
-[List all news grouped by topic — e.g. "Politics: A, B | Economy: C, D | Sports: E"]
-
-RULES:
-- Extract EVERY visible news item — don't skip anything
-- If text is blurry, describe what you can see
-- Write key points in simple conversational English
-- A layman with no background should understand everything
-- Include ads, corrections, notices if they seem important`;
+IMPORTANT RULES:
+- If image is a single article — still use ===NEWS_START=== and ===NEWS_END===
+- If text is unclear — describe what you can see and give context
+- Write in simple conversational English — no jargon
+- ALWAYS output at least 1 ===NEWS_START=== block`;
 
 // ── UPLOAD PARSER ─────────────────────────────────────────
 function parseUploadedNews(text) {
+  const clean = t => (t || '').replace(/\*\*/g, '').replace(/^[\s*#-]+/, '').trim();
   const get = key => {
-    const m = text.match(new RegExp(key + ':\s*(.+)'));
-    return m ? m[1].trim() : '';
+    const re = new RegExp(key + '[:\\s]+(.+)');
+    const m = text.match(re);
+    return m ? clean(m[1]) : '';
   };
 
-  const newsItems = text.split('===NEWS_START===').slice(1).map(block => {
-    const b = block.split('===NEWS_END===')[0];
-    const g = key => { const m = b.match(new RegExp(key + ':\s*(.+)')); return m ? m[1].trim() : ''; };
+  const blocks = text.split(/={2,}NEWS_START={2,}/).slice(1);
+
+  const newsItems = blocks.map((block, bi) => {
+    const b = block.split(/={2,}NEWS_END={2,}/)[0];
+    const g = key => {
+      const re = new RegExp(key + '[:\\s]+(.+)');
+      const m = b.match(re);
+      return m ? clean(m[1]) : '';
+    };
     const getBlock = key => {
       const idx = b.indexOf(key + ':');
       if (idx === -1) return '';
       const after = b.slice(idx + key.length + 1);
-      const end = after.search(/\n[A-Z_]+:/);
-      return (end === -1 ? after : after.slice(0, end)).trim();
+      const end = after.search(/\n[A-Z_]{3,}:/);
+      return clean(end === -1 ? after : after.slice(0, end));
     };
-    const getBullets = key => getBlock(key).split('\n')
-      .map(l => l.replace(/^[•\-*]\s*/, '').trim()).filter(l => l.length > 5);
-    const getTerms = () => getBlock('DIFFICULT_WORDS').split('\n')
-      .map(l => l.replace(/^[•\-*]\s*/, '').trim())
-      .filter(l => l.includes('→'))
-      .map(l => { const i = l.indexOf('→'); return { word: l.slice(0,i).trim(), meaning: l.slice(i+1).trim() }; });
+    const getBullets = key => {
+      const blk = getBlock(key);
+      if (!blk) return [];
+      return blk.split('\n').map(l => l.replace(/^[•\-*\d.]+\s*/, '').trim()).filter(l => l.length > 8);
+    };
+    const getTerms = () => {
+      const blk = getBlock('DIFFICULT_WORDS');
+      if (!blk) return [];
+      return blk.split('\n').map(l => l.replace(/^[•\-*]\s*/, '').trim())
+        .filter(l => l.includes('→') || l.includes(' - '))
+        .map(l => {
+          const sep = l.includes('→') ? '→' : ' - ';
+          const i = l.indexOf(sep);
+          return i > 0 ? { word: clean(l.slice(0, i)), meaning: clean(l.slice(i + sep.length)) } : null;
+        }).filter(Boolean);
+    };
 
+    const headline = g('HEADLINE') || ('Article ' + (bi + 1));
     return {
-      num: parseInt(g('NEWS_NUM')) || 0,
-      page: g('PAGE'),
-      section: g('SECTION'),
-      headline: g('HEADLINE'),
-      importance: g('IMPORTANCE'),
-      upscPaper: g('UPSC_PAPER'),
+      num: parseInt(g('NEWS_NUM')) || bi + 1,
+      page: g('PAGE') || '1',
+      section: g('SECTION') || 'National',
+      headline,
+      importance: g('IMPORTANCE') || 'Medium',
+      upscPaper: g('UPSC_PAPER') || 'Not relevant',
       whatIsIt: getBlock('WHAT_IS_IT'),
       keyPoints: getBullets('KEY_POINTS'),
-      oneLine: g('ONE_LINE'),
+      oneLine: g('ONE_LINE') || g('ONE_LINE_SUMMARY'),
       terms: getTerms(),
     };
-  }).filter(n => n.headline);
+  }).filter(n => n.headline && n.headline.length > 3);
 
   return {
-    newspaper: get('NEWSPAPER_NAME'),
-    date: get('EDITION_DATE'),
-    totalCount: get('TOTAL_NEWS_COUNT'),
+    newspaper: clean(get('NEWSPAPER_NAME')) || 'Newspaper',
+    date: clean(get('EDITION_DATE')) || 'Recent edition',
+    totalCount: get('TOTAL_NEWS_COUNT') || String(newsItems.length),
     items: newsItems,
     pageIndex: get('PAGE_WISE_INDEX'),
     topicIndex: get('TOPIC_WISE_INDEX'),
   };
 }
-
 // ── FILE TO BASE64 ────────────────────────────────────────
 function fileToBase64(file) {
   return new Promise((resolve, reject) => {
