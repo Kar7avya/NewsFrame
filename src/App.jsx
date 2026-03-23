@@ -3,7 +3,7 @@ import NewsLens from "./NewsLens";
 import TrendingPage from "./TrendingPage";
 import EssayPage from "./EssayPage";
 import HinduDigest from "./Hindudigest";
-import StoryWeb from "./StoryWeb";
+import StoryWeb from "./StoryWeb2";
 import NewspaperIntelligence from "./NewspaperIntelligence";
 
 export default function App() {
