@@ -465,7 +465,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
   }
 
   return (
-    <div style={{ fontFamily: "'Inter',sans-serif", background: report ? "#fafaf9" : "#0a0613", color: "#1c1917", minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "hidden" }}>
+    <div style={{ fontFamily: "'Inter',sans-serif", background: report ? "#fafaf9" : "#000", color: "#1c1917", minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -484,104 +484,114 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
 
       {/* ── PROGRESS BAR ── */}
       {loading && (
-        <div style={{ height: 3, background: "rgba(155,135,245,.15)", overflow: "hidden", position:"fixed", top:52, left:0, right:0, zIndex:998 }}>
-          <div style={{ height: "100%", width: "35%", background: "linear-gradient(90deg,#9b87f5,#60a5fa)", animation: "prog 1s ease-in-out infinite alternate", transformOrigin: "left" }} />
+        <div style={{ height:2, background:"#f1f0ec", overflow:"hidden", position:"fixed", top:52, left:0, right:0, zIndex:998 }}>
+          <div style={{ height:"100%", width:"40%", background:"#000", animation:"prog 1s ease-in-out infinite alternate", transformOrigin:"left" }} />
         </div>
       )}
 
-      {/* ── DARK HERO ── */}
+      {/* ── HERO ── */}
       {!report && (
-        <div className="no-print" style={{ position:"relative", overflow:"hidden", background:"linear-gradient(135deg, #0a0613 0%, #150d27 50%, #0a0613 100%)", minHeight:"calc(100vh - 52px)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"4rem 1.5rem 3rem" }}>
+        <div className="no-print" style={{ background:"#000", minHeight:"calc(100vh - 52px)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"3rem 1.5rem 2rem", position:"relative", overflow:"hidden" }}>
 
-          {/* Ambient orbs */}
-          <div style={{ position:"absolute", top:"15%", right:"10%", width:500, height:500, borderRadius:"50%", background:"radial-gradient(circle, rgba(155,135,245,.18) 0%, transparent 70%)", animation:"orb 8s ease-in-out infinite", pointerEvents:"none" }} />
-          <div style={{ position:"absolute", bottom:"20%", left:"5%", width:400, height:400, borderRadius:"50%", background:"radial-gradient(circle, rgba(96,165,250,.12) 0%, transparent 70%)", animation:"orb 11s ease-in-out infinite reverse", pointerEvents:"none" }} />
-          <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:800, height:800, borderRadius:"50%", background:"radial-gradient(circle, rgba(155,135,245,.05) 0%, transparent 65%)", pointerEvents:"none" }} />
+          {/* Dot grid */}
+          <div style={{ position:"absolute", inset:0, backgroundImage:"radial-gradient(circle, rgba(255,255,255,.06) 1px, transparent 1px)", backgroundSize:"32px 32px", pointerEvents:"none" }} />
 
-          {/* Grid lines */}
-          <div style={{ position:"absolute", inset:0, backgroundImage:"linear-gradient(rgba(155,135,245,.04) 1px, transparent 1px),linear-gradient(90deg,rgba(155,135,245,.04) 1px, transparent 1px)", backgroundSize:"60px 60px", pointerEvents:"none" }} />
-
-          {/* Badge */}
-          <div style={{ position:"relative", zIndex:10, display:"inline-flex", alignItems:"center", gap:8, marginBottom:"1.5rem", padding:"6px 16px", borderRadius:100, border:"1px solid rgba(155,135,245,.3)", background:"rgba(155,135,245,.08)", backdropFilter:"blur(10px)" }}>
-            <div style={{ width:6, height:6, borderRadius:"50%", background:"#9b87f5", animation:"pulse 2s infinite" }} />
-            <span style={{ fontSize:11, fontFamily:"'JetBrains Mono',monospace", letterSpacing:".1em", textTransform:"uppercase", color:"#9b87f5" }}>AI News Intelligence · 10 Sources</span>
+          {/* Top badge */}
+          <div style={{ position:"relative", zIndex:10, display:"inline-flex", alignItems:"center", gap:8, marginBottom:"2rem", padding:"5px 14px", borderRadius:100, border:"1px solid rgba(255,255,255,.15)", background:"rgba(255,255,255,.04)" }}>
+            <div style={{ width:5, height:5, borderRadius:"50%", background:"#fff", animation:"pulse 2s infinite" }} />
+            <span style={{ fontSize:10, fontFamily:"'JetBrains Mono',monospace", letterSpacing:".12em", textTransform:"uppercase", color:"rgba(255,255,255,.5)" }}>AI News Intelligence</span>
           </div>
 
           {/* Headline */}
-          <h1 style={{ position:"relative", zIndex:10, fontFamily:"'Instrument Serif',serif", fontSize:"clamp(2.5rem,6vw,4.5rem)", lineHeight:1.08, letterSpacing:"-.03em", textAlign:"center", color:"#fff", marginBottom:"1.25rem", maxWidth:800, fontWeight:300 }}>
+          <h1 style={{ position:"relative", zIndex:10, fontFamily:"'Instrument Serif',serif", fontSize:"clamp(2.8rem,7vw,5.5rem)", lineHeight:1.05, letterSpacing:"-.04em", textAlign:"center", color:"#fff", marginBottom:"1.25rem", maxWidth:750, fontWeight:300 }}>
             Ask anything.<br />
-            <em style={{ fontStyle:"italic", background:"linear-gradient(135deg,#9b87f5,#60a5fa)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>Get the full picture.</em>
+            <em style={{ fontStyle:"italic", color:"rgba(255,255,255,.45)" }}>Get the full picture.</em>
           </h1>
 
           {/* Subtitle */}
-          <p style={{ position:"relative", zIndex:10, fontSize:"1rem", color:"rgba(255,255,255,.55)", fontWeight:300, lineHeight:1.7, marginBottom:"2.5rem", maxWidth:520, textAlign:"center" }}>
-            Searches 10 trusted sources — TOI, Hindu, BBC, Al Jazeera, CNN and more — and returns a complete report with tables, charts, maps and deep analysis.
+          <p style={{ position:"relative", zIndex:10, fontSize:"1rem", color:"rgba(255,255,255,.35)", fontWeight:300, lineHeight:1.75, marginBottom:"2.5rem", maxWidth:460, textAlign:"center", letterSpacing:".01em" }}>
+            Searches 10 trusted sources and returns a complete intelligence report — tables, charts, maps and deep analysis.
           </p>
 
-          {/* Search box */}
-          <div style={{ position:"relative", zIndex:10, width:"100%", maxWidth:620, marginBottom:"1.5rem" }}>
-            <div style={{ display:"flex", background:"rgba(255,255,255,.06)", border:"1.5px solid rgba(155,135,245,.3)", borderRadius:14, overflow:"hidden", backdropFilter:"blur(20px)", boxShadow:"0 0 40px rgba(155,135,245,.15), inset 0 1px 0 rgba(255,255,255,.08)" }}>
+          {/* Search */}
+          <div style={{ position:"relative", zIndex:10, width:"100%", maxWidth:580, marginBottom:"1.25rem" }}>
+            <div style={{ display:"flex", background:"rgba(255,255,255,.06)", border:"1px solid rgba(255,255,255,.12)", borderRadius:12, overflow:"hidden" }}>
               <input
                 value={query} onChange={e => setQuery(e.target.value)}
                 onKeyDown={e => e.key === "Enter" && startSearch()}
-                placeholder="e.g. India economy 2025, climate change, India-Pakistan..."
-                style={{ flex:1, padding:"1rem 1.25rem", border:"none", outline:"none", fontFamily:"Inter,sans-serif", fontSize:"0.95rem", background:"transparent", color:"#fff" }}
+                placeholder="India economy, climate change, India-Pakistan..."
+                style={{ flex:1, padding:"1rem 1.25rem", border:"none", outline:"none", fontFamily:"Inter,sans-serif", fontSize:".9rem", background:"transparent", color:"#fff" }}
               />
               <button onClick={() => startSearch()} disabled={loading}
-                style={{ padding:"1rem 1.75rem", background:loading?"rgba(155,135,245,.3)":"linear-gradient(135deg,#9b87f5,#7c6de0)", color:"#fff", border:"none", fontFamily:"Inter,sans-serif", fontSize:".875rem", fontWeight:600, cursor:loading?"not-allowed":"pointer", whiteSpace:"nowrap", transition:"all .2s", letterSpacing:".02em" }}>
+                style={{ padding:"1rem 1.75rem", background:loading?"rgba(255,255,255,.1)":"#fff", color:loading?"rgba(255,255,255,.4)":"#000", border:"none", fontFamily:"Inter,sans-serif", fontSize:".85rem", fontWeight:600, cursor:loading?"not-allowed":"pointer", whiteSpace:"nowrap", transition:"all .2s" }}>
                 {loading ? "Searching…" : "Search →"}
               </button>
             </div>
           </div>
 
           {/* Quick chips */}
-          <div style={{ position:"relative", zIndex:10, display:"flex", gap:7, justifyContent:"center", flexWrap:"wrap", maxWidth:640, marginBottom:"3rem" }}>
+          <div style={{ position:"relative", zIndex:10, display:"flex", gap:6, justifyContent:"center", flexWrap:"wrap", maxWidth:580, marginBottom:"3.5rem" }}>
             {QUICK_TOPICS.map(t => (
               <button key={t.q} onClick={() => { setQuery(t.q); startSearch(t.q); }}
-                style={{ fontSize:11.5, padding:"5px 14px", border:"1px solid rgba(255,255,255,.12)", borderRadius:100, cursor:"pointer", color:"rgba(255,255,255,.6)", background:"rgba(255,255,255,.05)", fontFamily:"Inter,sans-serif", transition:"all .15s", backdropFilter:"blur(10px)" }}>
+                style={{ fontSize:11, padding:"4px 13px", border:"1px solid rgba(255,255,255,.1)", borderRadius:100, cursor:"pointer", color:"rgba(255,255,255,.4)", background:"transparent", fontFamily:"Inter,sans-serif", transition:"all .15s" }}>
                 {t.label}
               </button>
             ))}
           </div>
 
+          {/* GLOBE */}
+          <div style={{ position:"relative", zIndex:10, width:"100%", maxWidth:700, marginBottom:"2rem" }}>
+            {/* Glow behind globe */}
+            <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:320, height:320, borderRadius:"50%", background:"radial-gradient(circle, rgba(255,255,255,.06) 0%, transparent 70%)", pointerEvents:"none" }} />
+            <div style={{ width:"100%", display:"flex", justifyContent:"center", height:200, position:"relative", overflow:"hidden" }}>
+              <img
+                src="https://blocks.mvp-subha.me/assets/earth.png"
+                alt="Globe"
+                style={{ position:"absolute", top:0, left:"50%", transform:"translateX(-50%)", height:280, width:"auto", opacity:0.7, filter:"grayscale(100%) brightness(1.4) contrast(1.1)", animation:"float 6s ease-in-out infinite" }}
+              />
+              {/* Fade bottom */}
+              <div style={{ position:"absolute", bottom:0, left:0, right:0, height:80, background:"linear-gradient(to top, #000, transparent)", zIndex:2 }} />
+            </div>
+          </div>
+
           {/* Source pills */}
-          <div style={{ position:"relative", zIndex:10, display:"flex", gap:6, justifyContent:"center", flexWrap:"wrap" }}>
-            {["TOI","HT","The Hindu","Al Jazeera","BBC","CNN","Wash. Times","NYT","India Today","ET"].map((src,i) => (
-              <span key={src} style={{ fontSize:10, fontFamily:"'JetBrains Mono',monospace", color:"rgba(155,135,245,.7)", background:"rgba(155,135,245,.08)", border:"1px solid rgba(155,135,245,.2)", padding:"3px 10px", borderRadius:100, whiteSpace:"nowrap", animation:`shimmerGlow ${2+i*0.2}s ease-in-out infinite` }}>
+          <div style={{ position:"relative", zIndex:10, display:"flex", gap:5, justifyContent:"center", flexWrap:"wrap", maxWidth:560 }}>
+            {["TOI","HT","The Hindu","Al Jazeera","BBC","CNN","Wash. Times","NYT","India Today","ET"].map(src => (
+              <span key={src} style={{ fontSize:9.5, fontFamily:"'JetBrains Mono',monospace", color:"rgba(255,255,255,.25)", background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.08)", padding:"2px 9px", borderRadius:100, whiteSpace:"nowrap" }}>
                 {src}
               </span>
             ))}
           </div>
 
-          {/* Status inside hero */}
+          {/* Status */}
           {loading && statusMsg && (
-            <div style={{ position:"relative", zIndex:10, marginTop:"1.5rem", display:"flex", alignItems:"center", gap:10, padding:"10px 18px", background:"rgba(155,135,245,.1)", border:"1px solid rgba(155,135,245,.25)", borderRadius:10, fontSize:13, color:"#c4b5fd" }}>
-              <div style={{ width:8, height:8, borderRadius:"50%", background:"#9b87f5", animation:"pulse 1.4s infinite", flexShrink:0 }} />
+            <div style={{ position:"relative", zIndex:10, marginTop:"1.5rem", display:"flex", alignItems:"center", gap:10, padding:"10px 18px", background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.1)", borderRadius:10, fontSize:12.5, color:"rgba(255,255,255,.6)", fontFamily:"'JetBrains Mono',monospace" }}>
+              <div style={{ width:7, height:7, borderRadius:"50%", background:"#fff", animation:"pulse 1.4s infinite", flexShrink:0 }} />
               {statusMsg}
             </div>
           )}
 
           {/* Notice */}
           {notice && (
-            <div style={{ position:"relative", zIndex:10, marginTop:"1rem", background:"rgba(96,165,250,.1)", border:"1px solid rgba(96,165,250,.25)", borderRadius:10, padding:"1rem 1.4rem", fontSize:13, color:"#93c5fd", maxWidth:620, lineHeight:1.8, textAlign:"center" }}>
+            <div style={{ position:"relative", zIndex:10, marginTop:"1rem", background:"rgba(255,255,255,.05)", border:"1px solid rgba(255,255,255,.1)", borderRadius:10, padding:"1rem 1.4rem", fontSize:13, color:"rgba(255,255,255,.6)", maxWidth:560, lineHeight:1.8, textAlign:"center" }}>
               {notice}
             </div>
           )}
 
           {/* Error */}
           {error && (
-            <div style={{ position:"relative", zIndex:10, marginTop:"1rem", background:"rgba(239,68,68,.1)", border:"1px solid rgba(239,68,68,.25)", borderRadius:10, padding:"1rem 1.4rem", fontSize:13, color:"#fca5a5", maxWidth:620, lineHeight:1.7, textAlign:"center" }}>
-              <strong>Error:</strong> {error}<br /><br />
-              Get your free Groq key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" style={{ color:"#f87171" }}>console.groq.com/keys</a>
+            <div style={{ position:"relative", zIndex:10, marginTop:"1rem", background:"rgba(255,255,255,.04)", border:"1px solid rgba(255,255,255,.15)", borderRadius:10, padding:"1rem 1.4rem", fontSize:13, color:"rgba(255,255,255,.5)", maxWidth:560, lineHeight:1.7, textAlign:"center" }}>
+              <strong style={{ color:"#fff" }}>Error:</strong> {error}<br /><br />
+              Get your free Groq key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" style={{ color:"rgba(255,255,255,.7)" }}>console.groq.com/keys</a>
             </div>
           )}
 
-          {/* Stats row */}
-          <div style={{ position:"relative", zIndex:10, display:"flex", gap:"2rem", marginTop:"3rem", flexWrap:"wrap", justifyContent:"center" }}>
-            {[["10", "Sources searched"], ["AI", "Powered analysis"], ["Free", "No signup needed"], ["Live", "Real-time data"]].map(([val, label]) => (
+          {/* Stats */}
+          <div style={{ position:"relative", zIndex:10, display:"flex", gap:"3rem", marginTop:"2.5rem", flexWrap:"wrap", justifyContent:"center", borderTop:"1px solid rgba(255,255,255,.06)", paddingTop:"2rem", width:"100%", maxWidth:500 }}>
+            {[["10","Sources"],["AI","Analysis"],["Free","No signup"],["Live","Real-time"]].map(([val, label]) => (
               <div key={label} style={{ textAlign:"center" }}>
-                <div style={{ fontSize:"1.5rem", fontWeight:700, fontFamily:"'JetBrains Mono',monospace", background:"linear-gradient(135deg,#9b87f5,#60a5fa)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>{val}</div>
-                <div style={{ fontSize:11, color:"rgba(255,255,255,.4)", letterSpacing:".05em", textTransform:"uppercase", marginTop:2 }}>{label}</div>
+                <div style={{ fontSize:"1.4rem", fontWeight:700, fontFamily:"'JetBrains Mono',monospace", color:"#fff", letterSpacing:"-.02em" }}>{val}</div>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,.25)", letterSpacing:".08em", textTransform:"uppercase", marginTop:3 }}>{label}</div>
               </div>
             ))}
           </div>
