@@ -785,7 +785,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             <img
               src="/worldmap.png"
               alt="World Map"
-              style={{ width:"100%", height:"auto", filter:"invert(1) brightness(0.85)", opacity:0.75, display:"block" }}
+              style={{ width:"100%", height:"auto", filter:"invert(1) brightness(0.6) contrast(1.4)", opacity:0.6, display:"block", mixBlendMode:"screen" }}
             />
             {/* Fade edges */}
             <div style={{ position:"absolute", inset:0, background:"radial-gradient(ellipse at center, transparent 45%, #000 90%)", pointerEvents:"none" }} />
