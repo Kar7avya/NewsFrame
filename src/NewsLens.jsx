@@ -1,6 +1,4 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { saveReport, saveArticles, autoCleanupIfNeeded } from "./supabase";
-import RAGChat from "./RAGChat";
 import { Chart, registerables } from "chart.js";
 Chart.register(...registerables);
 
@@ -369,20 +367,6 @@ function WorldMap({ locations }) {
 // ── MAIN APP ─────────────────────────────────────────────
 export default function NewsLens({ initialQuery = "", onQueryUsed }) {
   const [query, setQuery] = useState("");
-
-  // Run auto-cleanup once per day on app load
-  useEffect(() => {
-    autoCleanupIfNeeded(90);
-  }, []);
-
-  // Auto-search when coming from Trending page
-  useEffect(() => {
-    if (initialQuery) {
-      setQuery(initialQuery);
-      startSearch(initialQuery);
-      if (onQueryUsed) onQueryUsed();
-    }
-  }, [initialQuery]);
   const [loading, setLoading] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
   const [error, setError] = useState("");
@@ -434,6 +418,16 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
     }
   }, [query]);
 
+  // Auto-cleanup on load
+  // Auto-search when coming from Trending page
+  useEffect(() => {
+    if (initialQuery) {
+      setQuery(initialQuery);
+      startSearch(initialQuery);
+      if (onQueryUsed) onQueryUsed();
+    }
+  }, [initialQuery]);
+
   function parseAndSetReport(q, text) {
     const s0 = extractSection(text, "SECTION 0", "SECTION 1");
     const s1 = extractSection(text, "SECTION 1", "SECTION 2");
@@ -467,9 +461,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
       ],
     });
 
-    // Save to Supabase for RAG — articles stored for future RAG chat
-    saveReport(q, text);
-    saveArticles(q, newsRows);
+    // Supabase RAG disabled
   }
 
   return (
@@ -488,16 +480,12 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
       `}</style>
 
       {/* ── HEADER ── */}
-      <header className="no-print" style={{ background: "#fff", borderBottom: "1px solid #e8e6e1", padding: "0 2rem", height: 58, display: "flex", alignItems: "center", justifyContent: "space-between", position: "sticky", top: 0, zIndex: 100, backdropFilter: "blur(8px)", width: "100%" }}>
-        <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "1.35rem", letterSpacing: "-.01em" }}>
-          News<em style={{ fontStyle: "italic", color: "#1d4ed8" }}>Lens</em>
-        </div>
-        <div style={{ display: "flex", gap: 6 }}>
-          {["TOI", "HT", "Hindu", "Al Jazeera", "BBC", "CNN", "Wash. Times", "NYT", "India Today", "ET"].map(s => (
-            <span key={s} style={{ fontSize: 10.5, fontFamily: "'JetBrains Mono',monospace", color: "#a8a29e", background: "#fafaf9", border: "1px solid #e8e6e1", padding: "3px 9px", borderRadius: 100 }}>{s}</span>
-          ))}
-        </div>
-      </header>
+      {/* Source pills strip — no duplicate header */}
+      <div className="no-print" style={{ background: "#fff", borderBottom: "1px solid #e8e6e1", padding: "0 2rem", height: 36, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, overflowX: "auto" }}>
+        {["TOI", "HT", "Hindu", "Al Jazeera", "BBC", "CNN", "Wash. Times", "NYT", "India Today", "ET"].map(src => (
+          <span key={src} style={{ fontSize: 10.5, fontFamily: "'JetBrains Mono',monospace", color: "#a8a29e", background: "#fafaf9", border: "1px solid #e8e6e1", padding: "2px 9px", borderRadius: 100, whiteSpace: "nowrap" }}>{src}</span>
+        ))}
+      </div>
 
       {/* ── PROGRESS BAR ── */}
       {loading && (
@@ -574,7 +562,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             <div>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "#a8a29e", marginBottom: ".4rem" }}>NewsLens Report</div>
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "clamp(1.5rem,3vw,2.1rem)", letterSpacing: "-.02em", lineHeight: 1.2, textTransform: "capitalize" }}>{report.query}</div>
-              {/* <div style={{ fontSize: 12, color: "#a8a29e", marginTop: ".35rem", fontFamily: "'JetBrains Mono',monospace" }}>{report.generatedAt} · TOI, HT, Hindu, Al Jazeera, BBC, CNN, NYT, ET</div> */}
+              <div style={{ fontSize: 12, color: "#a8a29e", marginTop: ".35rem", fontFamily: "'JetBrains Mono',monospace" }}>{report.generatedAt} · TOI, HT, Hindu, Al Jazeera, BBC, CNN, NYT, ET</div>
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="no-print" onClick={() => { setReport(null); setQuery(""); }}
@@ -730,11 +718,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             <WorldMap locations={report.locations} />
           </div>
 
-          {/* RAG Chat */}
-          <div style={{marginBottom:"1.5rem"}}>
-            <SLabel>Ask AI about this report</SLabel>
-            <RAGChat topic={report.query} />
-          </div>
+
 
           {/* Takeaway */}
           {report.takeaway && (
@@ -752,7 +736,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
 
       {/* ElevenLabs widget */}
       <div style={{ position: "fixed", bottom: 24, right: 24, zIndex: 200 }}>
-        <elevenlabs-convai agent-id="agent_4601km5fj0xnf9qbwjm292ttpw3x" />
+        <elevenlabs-convai agent-id="agent_4601km5fj0xnf9qbwjm292ttpw3x"></elevenlabs-convai>
       </div>
     </div>
   );
