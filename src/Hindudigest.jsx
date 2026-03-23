@@ -2,6 +2,101 @@ import { useState, useRef, useCallback, useEffect } from "react";
 
 const GROQ_KEY = import.meta.env.VITE_GROQ_KEY;
 
+// ── THE HINDU RSS FEEDS ───────────────────────────────────
+const HINDU_RSS = {
+  all:       "https://www.thehindu.com/feeder/default.rss",
+  national:  "https://www.thehindu.com/news/national/feeder/default.rss",
+  world:     "https://www.thehindu.com/news/international/feeder/default.rss",
+  economy:   "https://www.thehindu.com/business/feeder/default.rss",
+  editorial: "https://www.thehindu.com/opinion/editorial/feeder/default.rss",
+  science:   "https://www.thehindu.com/sci-tech/feeder/default.rss",
+  upsc:      "https://www.thehindu.com/news/national/feeder/default.rss",
+};
+
+async function fetchHinduRSS(section) {
+  const feedUrl = HINDU_RSS[section] || HINDU_RSS.all;
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(feedUrl)}`;
+  const res = await fetch(proxyUrl);
+  const data = await res.json();
+  const parser = new DOMParser();
+  const xml = parser.parseFromString(data.contents, "text/xml");
+  const items = Array.from(xml.querySelectorAll("item"));
+  return items.map(item => ({
+    title:       item.querySelector("title")?.textContent?.trim() || "",
+    link:        item.querySelector("link")?.textContent?.trim() || "",
+    description: item.querySelector("description")?.textContent?.replace(/<[^>]+>/g,"").trim() || "",
+    pubDate:     item.querySelector("pubDate")?.textContent?.trim() || "",
+    category:    item.querySelector("category")?.textContent?.trim() || section,
+  })).filter(i => i.title && i.link);
+}
+
+async function explainWithGroq(rssItems, section, dateStr) {
+  const headlines = rssItems.slice(0,8).map((item,i) =>
+    `${i+1}. HEADLINE: ${item.title}\nDESCRIPTION: ${item.description?.slice(0,200) || "No description"}`
+  ).join("\n\n");
+
+  const prompt = `You are a brilliant teacher. These are REAL articles from The Hindu RSS feed fetched right now.
+
+${headlines}
+
+For EACH article, explain it in this EXACT format:
+
+===ARTICLE_START===
+ARTICLE_NUM: [1-8]
+SECTION: [National/World/Economy/Editorial/Science/Sports/Environment]
+HEADLINE: [copy the headline exactly as given]
+PAGE: RSS Feed
+IMPORTANCE: [High/Medium/Low]
+UPSC_PAPER: [GS1/GS2/GS3/GS4/Prelims/Not relevant]
+UPSC_TOPIC: [specific syllabus topic or "General awareness"]
+
+WHAT_IS_IT:
+[2 sentences in simple everyday language — explain like talking to a friend with no news background]
+
+KEY_POINTS:
+• [Most important fact from this article]
+• [Second important point]
+• [Background or cause]
+• [Who is affected and how]
+• [What happens next or government response]
+• [Expert opinion or criticism if mentioned]
+• [Way forward or conclusion]
+
+ONE_LINE: [One sentence a 12-year-old understands]
+
+DIFFICULT_WORDS:
+• [hard word] → [simple meaning]
+• [hard word] → [simple meaning]
+
+UPSC_CONNECT:
+[How to use this in UPSC prep — 1-2 sentences]
+
+FOLLOW_UP:
+• [related topic to study]
+• [related topic to study]
+===ARTICLE_END===
+
+Explain all ${rssItems.slice(0,8).length} articles. Keep language simple and clear.`;
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile",
+      max_tokens: 4000,
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: `You are explaining The Hindu articles for ${dateStr}. Use ONLY the provided headlines and descriptions.` },
+        { role: "user", content: prompt },
+      ],
+    }),
+  });
+  if (!res.ok) throw new Error(`Groq error ${res.status}`);
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+
 const SECTIONS = [
   { id: "all",       label: "All Sections", icon: "📰" },
   { id: "national",  label: "National",     icon: "🇮🇳" },
@@ -599,9 +694,20 @@ function ArticleCard({ article, index }) {
                     <div style={{fontSize:13.5,color:"#1e40af",lineHeight:1.7}}>{article.whyMatters}</div>
                   </div>
                 )}
-                <a href={`https://www.thehindu.com/search/?q=${encodeURIComponent(article.headline)}`} target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:5,marginTop:12,fontSize:12,color:"#1d4ed8",textDecoration:"none",fontWeight:500,padding:"6px 14px",border:"1px solid #bfdbfe",borderRadius:100,background:"#eff6ff"}}>
-                  Read full article on thehindu.com ↗
-                </a>
+                <div style={{display:"flex",gap:8,marginTop:12,flexWrap:"wrap"}}>
+                  {article.realUrl ? (
+                    <a href={article.realUrl} target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,color:"#fff",textDecoration:"none",fontWeight:600,padding:"7px 14px",borderRadius:100,background:"#1c1917"}}>
+                      Read full article ↗
+                    </a>
+                  ) : (
+                    <a href={`https://www.thehindu.com/search/?q=${encodeURIComponent(article.headline)}`} target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,color:"#1d4ed8",textDecoration:"none",fontWeight:500,padding:"6px 14px",border:"1px solid #bfdbfe",borderRadius:100,background:"#eff6ff"}}>
+                      Search on thehindu.com ↗
+                    </a>
+                  )}
+                  <a href={`https://news.google.com/search?q=${encodeURIComponent(article.headline)}`} target="_blank" rel="noopener noreferrer" style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:12,color:"#57534e",textDecoration:"none",padding:"6px 14px",border:"1px solid #e8e6e1",borderRadius:100,background:"#f5f4f2"}}>
+                    🌐 Google News
+                  </a>
+                </div>
               </div>
             )}
 
@@ -683,29 +789,58 @@ export default function HinduDigest() {
 
   const generate = useCallback(async () => {
     setLoading(true); setArticles([]); setError(""); setGenerated(false);
-    let mi = 0; setStatusMsg(STATUS[0]);
+    let mi = 0; setStatusMsg("Fetching live articles from The Hindu...");
     statusRef.current = setInterval(() => { if (++mi < STATUS.length) setStatusMsg(STATUS[mi]); }, 2200);
     try {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method:"POST",
-        headers:{"Content-Type":"application/json",Authorization:`Bearer ${GROQ_KEY}`},
-        body:JSON.stringify({
-          model:"llama-3.3-70b-versatile", max_tokens:4000, temperature:0.3,
-          messages:[
-            {role:"system",content:buildPrompt(dateStr,section)},
-            {role:"user",content:`Explain each article from The Hindu for ${dateStr} in numbered key points. Section: ${section}.`},
-          ],
-        }),
-      });
-      clearInterval(statusRef.current); setLoading(false); setStatusMsg("");
-      if (!res.ok) {
-        const e = await res.json().catch(()=>({}));
-        if (res.status===429) throw new Error("Rate limit — wait 30 seconds and try again");
-        throw new Error(e.error?.message||`Error ${res.status}`);
+      // Step 1 — fetch real RSS articles from The Hindu
+      let rssItems = [];
+      try {
+        setStatusMsg("Reading The Hindu RSS feed...");
+        rssItems = await fetchHinduRSS(section);
+        console.log("RSS fetched:", rssItems.length, "articles");
+      } catch(rssErr) {
+        console.warn("RSS failed, falling back to AI:", rssErr.message);
       }
-      const data = await res.json();
-      const parsed = parseArticles(data.choices[0].message.content);
-      setArticles(parsed); setGenerated(true);
+
+      let text = "";
+      if (rssItems.length > 0) {
+        // Step 2 — use Groq to explain real RSS articles
+        setStatusMsg(`Got ${rssItems.length} real articles — explaining with AI...`);
+        text = await explainWithGroq(rssItems, section, dateStr);
+        // Attach real URLs to parsed articles
+        const parsed = parseArticles(text);
+        parsed.forEach((article, i) => {
+          if (rssItems[i]) {
+            article.realUrl = rssItems[i].link;
+            article.pubDate = rssItems[i].pubDate;
+          }
+        });
+        clearInterval(statusRef.current); setLoading(false); setStatusMsg("");
+        setArticles(parsed); setGenerated(true);
+      } else {
+        // Fallback — pure AI if RSS fails
+        setStatusMsg("RSS unavailable — generating from AI knowledge...");
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method:"POST",
+          headers:{"Content-Type":"application/json",Authorization:`Bearer ${GROQ_KEY}`},
+          body:JSON.stringify({
+            model:"llama-3.3-70b-versatile", max_tokens:4000, temperature:0.3,
+            messages:[
+              {role:"system",content:buildPrompt(dateStr,section)},
+              {role:"user",content:`Explain each article from The Hindu for ${dateStr} in numbered key points. Section: ${section}.`},
+            ],
+          }),
+        });
+        clearInterval(statusRef.current); setLoading(false); setStatusMsg("");
+        if (!res.ok) {
+          const e = await res.json().catch(()=>({}));
+          if (res.status===429) throw new Error("Rate limit — wait 30 seconds and try again");
+          throw new Error(e.error?.message||`Error ${res.status}`);
+        }
+        const data = await res.json();
+        const parsed = parseArticles(data.choices[0].message.content);
+        setArticles(parsed); setGenerated(true);
+      }
     } catch(e) {
       clearInterval(statusRef.current); setLoading(false); setStatusMsg(""); setError(e.message);
     }
