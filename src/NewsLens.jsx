@@ -542,7 +542,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
           {/* WORLD MAP */}
           <div style={{ position:"relative", zIndex:10, width:"100%", maxWidth:720, marginBottom:"2rem", animation:"float 7s ease-in-out infinite" }}>
             <img
-              src="/worldmap.png"
+              src="public/world-map.png"
               alt="World Map"
               style={{ width:"100%", height:"auto", opacity:0.75, filter:"invert(1) brightness(0.9)", display:"block" }}
             />
