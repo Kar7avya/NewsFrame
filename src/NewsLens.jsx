@@ -574,7 +574,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
             <div>
               <div style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, letterSpacing: ".1em", textTransform: "uppercase", color: "#a8a29e", marginBottom: ".4rem" }}>NewsLens Report</div>
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "clamp(1.5rem,3vw,2.1rem)", letterSpacing: "-.02em", lineHeight: 1.2, textTransform: "capitalize" }}>{report.query}</div>
-              <div style={{ fontSize: 12, color: "#a8a29e", marginTop: ".35rem", fontFamily: "'JetBrains Mono',monospace" }}>{report.generatedAt} · TOI, HT, Hindu, Al Jazeera, BBC, CNN, NYT, ET</div>
+              {/* <div style={{ fontSize: 12, color: "#a8a29e", marginTop: ".35rem", fontFamily: "'JetBrains Mono',monospace" }}>{report.generatedAt} · TOI, HT, Hindu, Al Jazeera, BBC, CNN, NYT, ET</div> */}
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button className="no-print" onClick={() => { setReport(null); setQuery(""); }}
