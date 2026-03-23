@@ -465,7 +465,7 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
   }
 
   return (
-    <div style={{ fontFamily: "'Inter',sans-serif", background: "#fafaf9", color: "#1c1917", minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "hidden" }}>
+    <div style={{ fontFamily: "'Inter',sans-serif", background: report ? "#fafaf9" : "#0a0613", color: "#1c1917", minHeight: "100vh", width: "100%", maxWidth: "100vw", overflowX: "hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -473,83 +473,118 @@ export default function NewsLens({ initialQuery = "", onQueryUsed }) {
         @keyframes fadeUp { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
         @keyframes prog { 0% { transform:translateX(0) scaleX(1); } 100% { transform:translateX(200%) scaleX(1.5); } }
         @keyframes pulse { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.3; transform:scale(.85); } }
+        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
+        @keyframes shimmerGlow { 0%,100%{opacity:.5} 50%{opacity:1} }
+        @keyframes orb { 0%{transform:translate(0,0) scale(1)} 33%{transform:translate(30px,-20px) scale(1.05)} 66%{transform:translate(-20px,15px) scale(.97)} 100%{transform:translate(0,0) scale(1)} }
         @media print {
           .no-print { display:none !important; }
           .report-wrap { animation: none !important; }
         }
       `}</style>
 
-      {/* ── HEADER ── */}
-      {/* Source pills strip — no duplicate header */}
-      <div className="no-print" style={{ background: "#fff", borderBottom: "1px solid #e8e6e1", padding: "0 2rem", height: 36, display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6, overflowX: "auto" }}>
-        {["TOI", "HT", "Hindu", "Al Jazeera", "BBC", "CNN", "Wash. Times", "NYT", "India Today", "ET"].map(src => (
-          <span key={src} style={{ fontSize: 10.5, fontFamily: "'JetBrains Mono',monospace", color: "#a8a29e", background: "#fafaf9", border: "1px solid #e8e6e1", padding: "2px 9px", borderRadius: 100, whiteSpace: "nowrap" }}>{src}</span>
-        ))}
-      </div>
-
       {/* ── PROGRESS BAR ── */}
       {loading && (
-        <div style={{ height: 2, background: "#e8e6e1", overflow: "hidden" }}>
-          <div style={{ height: "100%", width: "35%", background: "#1d4ed8", animation: "prog 1s ease-in-out infinite alternate", transformOrigin: "left" }} />
+        <div style={{ height: 3, background: "rgba(155,135,245,.15)", overflow: "hidden", position:"fixed", top:52, left:0, right:0, zIndex:998 }}>
+          <div style={{ height: "100%", width: "35%", background: "linear-gradient(90deg,#9b87f5,#60a5fa)", animation: "prog 1s ease-in-out infinite alternate", transformOrigin: "left" }} />
         </div>
       )}
 
-      {/* ── HERO ── */}
+      {/* ── DARK HERO ── */}
       {!report && (
-        <div className="no-print" style={{ maxWidth: 680, margin: "0 auto", padding: "4rem 1.5rem 2.5rem", textAlign: "center" }}>
-          <h1 style={{ fontFamily: "'Instrument Serif',serif", fontSize: "clamp(2rem,5vw,3.25rem)", lineHeight: 1.12, letterSpacing: "-.025em", marginBottom: ".75rem" }}>
-            Ask anything.<br /><em style={{ fontStyle: "italic", color: "#1d4ed8" }}>Get the full picture.</em>
+        <div className="no-print" style={{ position:"relative", overflow:"hidden", background:"linear-gradient(135deg, #0a0613 0%, #150d27 50%, #0a0613 100%)", minHeight:"calc(100vh - 52px)", display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", padding:"4rem 1.5rem 3rem" }}>
+
+          {/* Ambient orbs */}
+          <div style={{ position:"absolute", top:"15%", right:"10%", width:500, height:500, borderRadius:"50%", background:"radial-gradient(circle, rgba(155,135,245,.18) 0%, transparent 70%)", animation:"orb 8s ease-in-out infinite", pointerEvents:"none" }} />
+          <div style={{ position:"absolute", bottom:"20%", left:"5%", width:400, height:400, borderRadius:"50%", background:"radial-gradient(circle, rgba(96,165,250,.12) 0%, transparent 70%)", animation:"orb 11s ease-in-out infinite reverse", pointerEvents:"none" }} />
+          <div style={{ position:"absolute", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:800, height:800, borderRadius:"50%", background:"radial-gradient(circle, rgba(155,135,245,.05) 0%, transparent 65%)", pointerEvents:"none" }} />
+
+          {/* Grid lines */}
+          <div style={{ position:"absolute", inset:0, backgroundImage:"linear-gradient(rgba(155,135,245,.04) 1px, transparent 1px),linear-gradient(90deg,rgba(155,135,245,.04) 1px, transparent 1px)", backgroundSize:"60px 60px", pointerEvents:"none" }} />
+
+          {/* Badge */}
+          <div style={{ position:"relative", zIndex:10, display:"inline-flex", alignItems:"center", gap:8, marginBottom:"1.5rem", padding:"6px 16px", borderRadius:100, border:"1px solid rgba(155,135,245,.3)", background:"rgba(155,135,245,.08)", backdropFilter:"blur(10px)" }}>
+            <div style={{ width:6, height:6, borderRadius:"50%", background:"#9b87f5", animation:"pulse 2s infinite" }} />
+            <span style={{ fontSize:11, fontFamily:"'JetBrains Mono',monospace", letterSpacing:".1em", textTransform:"uppercase", color:"#9b87f5" }}>AI News Intelligence · 10 Sources</span>
+          </div>
+
+          {/* Headline */}
+          <h1 style={{ position:"relative", zIndex:10, fontFamily:"'Instrument Serif',serif", fontSize:"clamp(2.5rem,6vw,4.5rem)", lineHeight:1.08, letterSpacing:"-.03em", textAlign:"center", color:"#fff", marginBottom:"1.25rem", maxWidth:800, fontWeight:300 }}>
+            Ask anything.<br />
+            <em style={{ fontStyle:"italic", background:"linear-gradient(135deg,#9b87f5,#60a5fa)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>Get the full picture.</em>
           </h1>
-          <p style={{ fontSize: ".95rem", color: "#57534e", fontWeight: 300, lineHeight: 1.65, marginBottom: "2rem" }}>
-            Searches 5 trusted sources and returns a complete report — tables, charts, map and analysis.
+
+          {/* Subtitle */}
+          <p style={{ position:"relative", zIndex:10, fontSize:"1rem", color:"rgba(255,255,255,.55)", fontWeight:300, lineHeight:1.7, marginBottom:"2.5rem", maxWidth:520, textAlign:"center" }}>
+            Searches 10 trusted sources — TOI, Hindu, BBC, Al Jazeera, CNN and more — and returns a complete report with tables, charts, maps and deep analysis.
           </p>
 
-          {/* Search */}
-          <div style={{ display: "flex", maxWidth: 560, margin: "0 auto 1.25rem", background: "#fff", border: "1.5px solid #d1cec8", borderRadius: 12, overflow: "hidden", boxShadow: "0 2px 8px rgba(0,0,0,.05)" }}>
-            <input
-              value={query} onChange={e => setQuery(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && startSearch()}
-              placeholder="e.g. India-Pakistan relations, climate change, India economy 2025..."
-              style={{ flex: 1, padding: ".85rem 1.1rem", border: "none", outline: "none", fontFamily: "Inter,sans-serif", fontSize: ".95rem", background: "transparent", color: "#1c1917" }}
-            />
-            <button onClick={() => startSearch()} disabled={loading}
-              style={{ padding: ".85rem 1.5rem", background: loading ? "#a8a29e" : "#1c1917", color: "#fff", border: "none", fontFamily: "Inter,sans-serif", fontSize: ".875rem", fontWeight: 500, cursor: loading ? "not-allowed" : "pointer", whiteSpace: "nowrap" }}>
-              {loading ? "Searching…" : "Search →"}
-            </button>
+          {/* Search box */}
+          <div style={{ position:"relative", zIndex:10, width:"100%", maxWidth:620, marginBottom:"1.5rem" }}>
+            <div style={{ display:"flex", background:"rgba(255,255,255,.06)", border:"1.5px solid rgba(155,135,245,.3)", borderRadius:14, overflow:"hidden", backdropFilter:"blur(20px)", boxShadow:"0 0 40px rgba(155,135,245,.15), inset 0 1px 0 rgba(255,255,255,.08)" }}>
+              <input
+                value={query} onChange={e => setQuery(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && startSearch()}
+                placeholder="e.g. India economy 2025, climate change, India-Pakistan..."
+                style={{ flex:1, padding:"1rem 1.25rem", border:"none", outline:"none", fontFamily:"Inter,sans-serif", fontSize:"0.95rem", background:"transparent", color:"#fff" }}
+              />
+              <button onClick={() => startSearch()} disabled={loading}
+                style={{ padding:"1rem 1.75rem", background:loading?"rgba(155,135,245,.3)":"linear-gradient(135deg,#9b87f5,#7c6de0)", color:"#fff", border:"none", fontFamily:"Inter,sans-serif", fontSize:".875rem", fontWeight:600, cursor:loading?"not-allowed":"pointer", whiteSpace:"nowrap", transition:"all .2s", letterSpacing:".02em" }}>
+                {loading ? "Searching…" : "Search →"}
+              </button>
+            </div>
           </div>
 
           {/* Quick chips */}
-          <div style={{ display: "flex", gap: 7, justifyContent: "center", flexWrap: "wrap" }}>
+          <div style={{ position:"relative", zIndex:10, display:"flex", gap:7, justifyContent:"center", flexWrap:"wrap", maxWidth:640, marginBottom:"3rem" }}>
             {QUICK_TOPICS.map(t => (
               <button key={t.q} onClick={() => { setQuery(t.q); startSearch(t.q); }}
-                style={{ fontSize: 12, padding: "5px 13px", border: "1px solid #e8e6e1", borderRadius: 100, cursor: "pointer", color: "#57534e", background: "#fff", fontFamily: "Inter,sans-serif" }}>
+                style={{ fontSize:11.5, padding:"5px 14px", border:"1px solid rgba(255,255,255,.12)", borderRadius:100, cursor:"pointer", color:"rgba(255,255,255,.6)", background:"rgba(255,255,255,.05)", fontFamily:"Inter,sans-serif", transition:"all .15s", backdropFilter:"blur(10px)" }}>
                 {t.label}
               </button>
             ))}
           </div>
-        </div>
-      )}
 
-      {/* ── STATUS ── */}
-      {loading && statusMsg && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 18px", background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, fontSize: 13, color: "#1d4ed8", maxWidth: 680, margin: ".75rem auto 0" }}>
-          <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#1d4ed8", animation: "pulse 1.4s infinite", flexShrink: 0 }} />
-          {statusMsg}
-        </div>
-      )}
+          {/* Source pills */}
+          <div style={{ position:"relative", zIndex:10, display:"flex", gap:6, justifyContent:"center", flexWrap:"wrap" }}>
+            {["TOI","HT","The Hindu","Al Jazeera","BBC","CNN","Wash. Times","NYT","India Today","ET"].map((src,i) => (
+              <span key={src} style={{ fontSize:10, fontFamily:"'JetBrains Mono',monospace", color:"rgba(155,135,245,.7)", background:"rgba(155,135,245,.08)", border:"1px solid rgba(155,135,245,.2)", padding:"3px 10px", borderRadius:100, whiteSpace:"nowrap", animation:`shimmerGlow ${2+i*0.2}s ease-in-out infinite` }}>
+                {src}
+              </span>
+            ))}
+          </div>
 
-      {/* ── NOTICE ── */}
-      {notice && (
-        <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "1rem 1.4rem", fontSize: 13, color: "#1e40af", margin: ".75rem auto", maxWidth: 680, lineHeight: 1.8 }}>
-          {notice}
-        </div>
-      )}
+          {/* Status inside hero */}
+          {loading && statusMsg && (
+            <div style={{ position:"relative", zIndex:10, marginTop:"1.5rem", display:"flex", alignItems:"center", gap:10, padding:"10px 18px", background:"rgba(155,135,245,.1)", border:"1px solid rgba(155,135,245,.25)", borderRadius:10, fontSize:13, color:"#c4b5fd" }}>
+              <div style={{ width:8, height:8, borderRadius:"50%", background:"#9b87f5", animation:"pulse 1.4s infinite", flexShrink:0 }} />
+              {statusMsg}
+            </div>
+          )}
 
-      {/* ── ERROR ── */}
-      {error && (
-        <div style={{ background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 10, padding: "1rem 1.4rem", fontSize: 13, color: "#b91c1c", margin: ".75rem auto", maxWidth: 680, lineHeight: 1.7 }}>
-          <strong>Error:</strong> {error}<br /><br />
-          Get your free Groq key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" style={{ color: "#b91c1c" }}>console.groq.com/keys</a>
+          {/* Notice */}
+          {notice && (
+            <div style={{ position:"relative", zIndex:10, marginTop:"1rem", background:"rgba(96,165,250,.1)", border:"1px solid rgba(96,165,250,.25)", borderRadius:10, padding:"1rem 1.4rem", fontSize:13, color:"#93c5fd", maxWidth:620, lineHeight:1.8, textAlign:"center" }}>
+              {notice}
+            </div>
+          )}
+
+          {/* Error */}
+          {error && (
+            <div style={{ position:"relative", zIndex:10, marginTop:"1rem", background:"rgba(239,68,68,.1)", border:"1px solid rgba(239,68,68,.25)", borderRadius:10, padding:"1rem 1.4rem", fontSize:13, color:"#fca5a5", maxWidth:620, lineHeight:1.7, textAlign:"center" }}>
+              <strong>Error:</strong> {error}<br /><br />
+              Get your free Groq key at <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer" style={{ color:"#f87171" }}>console.groq.com/keys</a>
+            </div>
+          )}
+
+          {/* Stats row */}
+          <div style={{ position:"relative", zIndex:10, display:"flex", gap:"2rem", marginTop:"3rem", flexWrap:"wrap", justifyContent:"center" }}>
+            {[["10", "Sources searched"], ["AI", "Powered analysis"], ["Free", "No signup needed"], ["Live", "Real-time data"]].map(([val, label]) => (
+              <div key={label} style={{ textAlign:"center" }}>
+                <div style={{ fontSize:"1.5rem", fontWeight:700, fontFamily:"'JetBrains Mono',monospace", background:"linear-gradient(135deg,#9b87f5,#60a5fa)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>{val}</div>
+                <div style={{ fontSize:11, color:"rgba(255,255,255,.4)", letterSpacing:".05em", textTransform:"uppercase", marginTop:2 }}>{label}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
