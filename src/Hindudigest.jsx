@@ -824,8 +824,7 @@ export default function HinduDigest() {
               </div>
             )}
           </div>
-        </div>
-          </div>}
+        </div>}
       </div>
     </div>
   );
