@@ -841,9 +841,182 @@ const SEC_COLORS = {
   environment:{bg:"#f0fdf4",text:"#14532d",border:"#bbf7d0"},
 };
 
+// ── IMPACT + MINDMAP PROMPTS ─────────────────────────────
+async function fetchImpact(headline, profile) {
+  const prompt = `You are a personal news analyst. Given this news article and the user's profile, explain exactly how this news affects them personally.
+
+Article: "${headline}"
+
+User Profile:
+- Profession: ${profile.profession}
+- City: ${profile.city}
+- Age group: ${profile.age}
+- Monthly income: ${profile.income}
+
+Output EXACTLY this format:
+
+DIRECT_IMPACT: [How this news directly affects this specific person — be specific with numbers/amounts if possible]
+FINANCIAL_IMPACT: [Any financial effect — savings, costs, salary, taxes, prices]
+CAREER_IMPACT: [Effect on their job/career/business]
+DAILY_LIFE: [How their day-to-day life changes — practical examples]
+TIMELINE: [When will they feel this impact — immediately/1 month/6 months/1 year]
+ACTION_NEEDED: [What should this person DO now because of this news — specific actionable steps]
+OPPORTUNITY: [Any opportunity this creates for them — silver lining]
+WORRY_LEVEL: [Low/Medium/High — how much should they worry]
+WORRY_REASON: [One sentence why]`;
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile", max_tokens: 1200, temperature: 0.4,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error("API error " + res.status);
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+function parseImpact(text) {
+  const get = key => {
+    const m = text.match(new RegExp(key + ":\s*(.+)"));
+    return m ? m[1].trim() : "";
+  };
+  return {
+    direct:    get("DIRECT_IMPACT"),
+    financial: get("FINANCIAL_IMPACT"),
+    career:    get("CAREER_IMPACT"),
+    daily:     get("DAILY_LIFE"),
+    timeline:  get("TIMELINE"),
+    action:    get("ACTION_NEEDED"),
+    opportunity: get("OPPORTUNITY"),
+    worryLevel: get("WORRY_LEVEL"),
+    worryReason: get("WORRY_REASON"),
+  };
+}
+
+async function fetchMindMap(headline) {
+  const prompt = `You are a news analyst. Create a detailed mind map for this news article: "${headline}"
+
+Output EXACTLY this format — a hierarchical mind map showing the full sequence of events, causes and effects:
+
+ROOT: [The central topic — 4-5 words]
+
+BRANCH_1_TITLE: Background & Causes
+BRANCH_1_NODE_1: [specific cause or historical context]
+BRANCH_1_NODE_2: [another cause]
+BRANCH_1_NODE_3: [key event that led here]
+
+BRANCH_2_TITLE: What Happened
+BRANCH_2_NODE_1: [main development]
+BRANCH_2_NODE_2: [key fact or data]
+BRANCH_2_NODE_3: [who did what]
+
+BRANCH_3_TITLE: Immediate Effects
+BRANCH_3_NODE_1: [effect 1]
+BRANCH_3_NODE_2: [effect 2]
+BRANCH_3_NODE_3: [effect 3]
+
+BRANCH_4_TITLE: People & Institutions
+BRANCH_4_NODE_1: [person/org 1 and their role]
+BRANCH_4_NODE_2: [person/org 2 and their role]
+BRANCH_4_NODE_3: [person/org 3 and their role]
+
+BRANCH_5_TITLE: Future Consequences
+BRANCH_5_NODE_1: [what happens next — short term]
+BRANCH_5_NODE_2: [medium term consequence]
+BRANCH_5_NODE_3: [long term impact]
+
+BRANCH_6_TITLE: India & Global Connection
+BRANCH_6_NODE_1: [India angle]
+BRANCH_6_NODE_2: [global angle]
+BRANCH_6_NODE_3: [geopolitical or economic connection]
+
+Keep each node to 6-8 words max.`;
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile", max_tokens: 1500, temperature: 0.3,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error("API error " + res.status);
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+function parseMindMap(text) {
+  const root = (text.match(/ROOT:\s*(.+)/) || [])[1]?.trim() || "Central Topic";
+  const branches = [];
+  for (let i = 1; i <= 6; i++) {
+    const titleMatch = text.match(new RegExp(`BRANCH_${i}_TITLE:\s*(.+)`));
+    if (!titleMatch) continue;
+    const nodes = [];
+    for (let j = 1; j <= 5; j++) {
+      const nm = text.match(new RegExp(`BRANCH_${i}_NODE_${j}:\s*(.+)`));
+      if (nm) nodes.push(nm[1].trim());
+    }
+    branches.push({ title: titleMatch[1].trim(), nodes });
+  }
+  return { root, branches };
+}
+
+// ── MIND MAP SVG ──────────────────────────────────────────
+function MindMapSVG({ data }) {
+  const BRANCH_COLORS = [
+    { bg:"#fef2f2", border:"#fecaca", text:"#b91c1c", dot:"#ef4444" },
+    { bg:"#eff6ff", border:"#bfdbfe", text:"#1e40af", dot:"#3b82f6" },
+    { bg:"#f0fdf4", border:"#bbf7d0", text:"#15803d", dot:"#22c55e" },
+    { bg:"#fdf4ff", border:"#e9d5ff", text:"#7e22ce", dot:"#a855f7" },
+    { bg:"#fefce8", border:"#fde68a", text:"#92400e", dot:"#eab308" },
+    { bg:"#f0f9ff", border:"#bae6fd", text:"#0369a1", dot:"#0ea5e9" },
+  ];
+
+  return (
+    <div style={{ overflowX: "auto" }}>
+      {/* Root */}
+      <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
+        <div style={{ background: "#1c1917", color: "#fff", borderRadius: 12, padding: "10px 20px", fontSize: 14, fontWeight: 600, fontFamily: "'Instrument Serif',serif", textAlign: "center", maxWidth: 300 }}>
+          {data.root}
+        </div>
+      </div>
+      {/* Branches grid */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(260px,1fr))", gap: 10 }}>
+        {data.branches.map((branch, bi) => {
+          const cs = BRANCH_COLORS[bi % BRANCH_COLORS.length];
+          return (
+            <div key={bi} style={{ background: cs.bg, border: `1px solid ${cs.border}`, borderRadius: 12, padding: "12px 14px" }}>
+              {/* Branch title */}
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+                <div style={{ width: 8, height: 8, borderRadius: "50%", background: cs.dot, flexShrink: 0 }} />
+                <div style={{ fontSize: 12, fontWeight: 700, color: cs.text, textTransform: "uppercase", letterSpacing: ".05em" }}>{branch.title}</div>
+              </div>
+              {/* Nodes */}
+              {branch.nodes.map((node, ni) => (
+                <div key={ni} style={{ display: "flex", gap: 8, marginBottom: 7, alignItems: "flex-start" }}>
+                  <div style={{ width: 18, height: 18, borderRadius: 5, background: "rgba(0,0,0,.06)", color: cs.text, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 9, fontWeight: 700, flexShrink: 0, marginTop: 1 }}>{ni + 1}</div>
+                  <div style={{ fontSize: 12.5, color: cs.text, lineHeight: 1.55 }}>{node}</div>
+                </div>
+              ))}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function ArticleCard({ article, index }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("points");
+  const [profile, setProfile] = useState({ profession:"Student", city:"Delhi", age:"18-25", income:"₹0-25k" });
+  const [impactData, setImpactData] = useState(null);
+  const [impactLoading, setImpactLoading] = useState(false);
+  const [mindMapData, setMindMapData] = useState(null);
+  const [mindMapLoading, setMindMapLoading] = useState(false);
   const ss = SEC_COLORS[(article.section||"").toLowerCase()] || {bg:"#f5f4f2",text:"#57534e",border:"#e8e6e1"};
   const isHigh = article.importance?.toLowerCase() === "high";
   const hasUPSC = article.upscPaper && !article.upscPaper.toLowerCase().includes("not");
@@ -873,8 +1046,14 @@ function ArticleCard({ article, index }) {
           </div>
 
           <div style={{display:"flex",borderBottom:"1px solid #f1f0ec",background:"#fff"}}>
-            {[{id:"points",label:`📌 Key Points (${article.keyPoints?.length||0})`},{id:"upsc",label:"🎯 UPSC"},{id:"terms",label:`📖 Terms (${article.terms?.length||0})`}].map(t => (
-              <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"10px 6px",border:"none",background:"transparent",fontSize:12,fontWeight:tab===t.id?600:400,color:tab===t.id?"#1c1917":"#a8a29e",cursor:"pointer",borderBottom:`2px solid ${tab===t.id?"#1c1917":"transparent"}`,transition:"all .15s"}}>{t.label}</button>
+            {[
+              {id:"points",label:`📌 Key Points`},
+              {id:"upsc",label:"🎯 UPSC"},
+              {id:"terms",label:"📖 Terms"},
+              {id:"impact",label:"🧮 Impact"},
+              {id:"mindmap",label:"🗺️ Mind Map"},
+            ].map(t => (
+              <button key={t.id} onClick={()=>setTab(t.id)} style={{flex:1,padding:"10px 4px",border:"none",background:"transparent",fontSize:11,fontWeight:tab===t.id?600:400,color:tab===t.id?"#1c1917":"#a8a29e",cursor:"pointer",borderBottom:`2px solid ${tab===t.id?"#1c1917":"transparent"}`,transition:"all .15s"}}>{t.label}</button>
             ))}
           </div>
 
@@ -947,6 +1126,122 @@ function ArticleCard({ article, index }) {
                     </div>
                   </div>
                 )) : <div style={{color:"#a8a29e",fontSize:13}}>No difficult terms identified.</div>}
+              </div>
+            )}
+
+            {tab==="impact" && (
+              <div>
+                {/* Profile selector */}
+                <div style={{background:"#fafaf9",border:"1px solid #e8e6e1",borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+                  <div style={{fontSize:11,fontFamily:"'JetBrains Mono',monospace",color:"#a8a29e",textTransform:"uppercase",letterSpacing:".06em",marginBottom:8}}>Your profile</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <div>
+                      <div style={{fontSize:11,color:"#57534e",marginBottom:3}}>Profession</div>
+                      <select value={profile.profession} onChange={e=>setProfile(p=>({...p,profession:e.target.value}))}
+                        style={{width:"100%",padding:"5px 8px",border:"1px solid #e8e6e1",borderRadius:7,fontSize:12,background:"#fff",fontFamily:"'Inter',sans-serif"}}>
+                        {["Student","Teacher","Engineer","Doctor","Lawyer","Farmer","Business Owner","Government Employee","IT Professional","Journalist","Unemployed","Other"].map(p=><option key={p}>{p}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,color:"#57534e",marginBottom:3}}>City</div>
+                      <select value={profile.city} onChange={e=>setProfile(p=>({...p,city:e.target.value}))}
+                        style={{width:"100%",padding:"5px 8px",border:"1px solid #e8e6e1",borderRadius:7,fontSize:12,background:"#fff",fontFamily:"'Inter',sans-serif"}}>
+                        {["Delhi","Mumbai","Bangalore","Chennai","Kolkata","Hyderabad","Pune","Ahmedabad","Jaipur","Lucknow","Small Town","Village"].map(c=><option key={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,color:"#57534e",marginBottom:3}}>Age</div>
+                      <select value={profile.age} onChange={e=>setProfile(p=>({...p,age:e.target.value}))}
+                        style={{width:"100%",padding:"5px 8px",border:"1px solid #e8e6e1",borderRadius:7,fontSize:12,background:"#fff",fontFamily:"'Inter',sans-serif"}}>
+                        {["Under 18","18-25","26-35","36-45","46-60","60+"].map(a=><option key={a}>{a}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <div style={{fontSize:11,color:"#57534e",marginBottom:3}}>Monthly income</div>
+                      <select value={profile.income} onChange={e=>setProfile(p=>({...p,income:e.target.value}))}
+                        style={{width:"100%",padding:"5px 8px",border:"1px solid #e8e6e1",borderRadius:7,fontSize:12,background:"#fff",fontFamily:"'Inter',sans-serif"}}>
+                        {["₹0-25k","₹25k-50k","₹50k-1L","₹1L-2L","₹2L+"].map(i=><option key={i}>{i}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <button
+                    onClick={async()=>{setImpactLoading(true);setImpactData(null);try{const t=await fetchImpact(article.headline,profile);setImpactData(parseImpact(t));}catch(e){console.error(e);}setImpactLoading(false);}}
+                    disabled={impactLoading}
+                    style={{marginTop:10,width:"100%",padding:"9px",background:impactLoading?"#a8a29e":"#1c1917",color:"#fff",border:"none",borderRadius:8,fontSize:13,fontWeight:600,cursor:impactLoading?"not-allowed":"pointer"}}>
+                    {impactLoading?"Calculating...":"🧮 How does this affect me? →"}
+                  </button>
+                </div>
+
+                {/* Impact results */}
+                {impactData && (
+                  <div style={{animation:"fadeUp .3s ease"}}>
+                    {/* Worry level banner */}
+                    <div style={{
+                      background:impactData.worryLevel==="High"?"#fef2f2":impactData.worryLevel==="Medium"?"#fefce8":"#f0fdf4",
+                      border:`1px solid ${impactData.worryLevel==="High"?"#fecaca":impactData.worryLevel==="Medium"?"#fde68a":"#bbf7d0"}`,
+                      borderRadius:10,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10
+                    }}>
+                      <div style={{fontSize:20}}>{impactData.worryLevel==="High"?"⚠️":impactData.worryLevel==="Medium"?"🟡":"✅"}</div>
+                      <div>
+                        <div style={{fontSize:12,fontWeight:700,color:impactData.worryLevel==="High"?"#b91c1c":impactData.worryLevel==="Medium"?"#92400e":"#15803d"}}>
+                          {impactData.worryLevel} concern level
+                        </div>
+                        <div style={{fontSize:12.5,color:"#374151",lineHeight:1.5}}>{impactData.worryReason}</div>
+                      </div>
+                    </div>
+
+                    {/* Impact cards */}
+                    {[
+                      {icon:"🎯",label:"Direct impact",val:impactData.direct,bg:"#eff6ff",tc:"#1e40af"},
+                      {icon:"💰",label:"Financial impact",val:impactData.financial,bg:"#f0fdf4",tc:"#166534"},
+                      {icon:"💼",label:"Career impact",val:impactData.career,bg:"#fdf4ff",tc:"#7e22ce"},
+                      {icon:"🏠",label:"Daily life",val:impactData.daily,bg:"#fefce8",tc:"#92400e"},
+                      {icon:"⏱️",label:"When you'll feel it",val:impactData.timeline,bg:"#f5f4f2",tc:"#57534e"},
+                      {icon:"🌟",label:"Opportunity",val:impactData.opportunity,bg:"#ecfdf5",tc:"#065f46"},
+                    ].filter(i=>i.val).map((item,i)=>(
+                      <div key={i} style={{background:item.bg,borderRadius:9,padding:"10px 13px",marginBottom:8}}>
+                        <div style={{fontSize:11,fontWeight:700,color:item.tc,marginBottom:4}}>{item.icon} {item.label}</div>
+                        <div style={{fontSize:13,color:"#374151",lineHeight:1.65}}>{item.val}</div>
+                      </div>
+                    ))}
+
+                    {/* Action needed — highlighted */}
+                    {impactData.action && (
+                      <div style={{background:"#1c1917",color:"#fff",borderRadius:10,padding:"12px 14px",marginTop:4}}>
+                        <div style={{fontSize:11,fontFamily:"'JetBrains Mono',monospace",color:"#60a5fa",textTransform:"uppercase",letterSpacing:".06em",marginBottom:5}}>✅ What you should do now</div>
+                        <div style={{fontSize:13.5,lineHeight:1.7,fontWeight:300}}>{impactData.action}</div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {tab==="mindmap" && (
+              <div>
+                {!mindMapData && !mindMapLoading && (
+                  <div style={{textAlign:"center",padding:"1.5rem 1rem"}}>
+                    <div style={{fontSize:32,marginBottom:10}}>🗺️</div>
+                    <div style={{fontSize:13.5,color:"#57534e",marginBottom:14,lineHeight:1.7}}>See the complete sequence — causes, events, effects, people and global connections mapped out</div>
+                    <button
+                      onClick={async()=>{setMindMapLoading(true);setMindMapData(null);try{const t=await fetchMindMap(article.headline);setMindMapData(parseMindMap(t));}catch(e){console.error(e);}setMindMapLoading(false);}}
+                      style={{padding:"10px 24px",background:"#1c1917",color:"#fff",border:"none",borderRadius:100,fontSize:13,fontWeight:600,cursor:"pointer"}}>
+                      🗺️ Build Mind Map →
+                    </button>
+                  </div>
+                )}
+                {mindMapLoading && (
+                  <div style={{textAlign:"center",padding:"2rem",color:"#a8a29e",fontSize:13}}>
+                    <div style={{width:32,height:32,border:"3px solid #e8e6e1",borderTop:"3px solid #1c1917",borderRadius:"50%",animation:"spin 1s linear infinite",margin:"0 auto 12px"}}/>
+                    Building mind map...
+                  </div>
+                )}
+                {mindMapData && (
+                  <div style={{animation:"fadeUp .3s ease"}}>
+                    <div style={{fontSize:12,color:"#a8a29e",marginBottom:12}}>Complete sequence map — {mindMapData.branches.length} branches · click any branch to explore</div>
+                    <MindMapSVG data={mindMapData} />
+                  </div>
+                )}
               </div>
             )}
           </div>
