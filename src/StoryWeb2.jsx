@@ -113,22 +113,14 @@ function getTypeStyle(type) {
 }
 
 // ── LAYOUT ENGINE ─────────────────────────────────────────
-function computeLayout(nodes, width = 700, height = 500) {
+function computeLayout(nodes, width = 560, height = 420) {
   const cx = width / 2, cy = height / 2;
   const positions = { CENTER: { x: cx, y: cy } };
-
-  // Group by type for better visual clustering
-  const typeGroups = {};
-  nodes.forEach(n => {
-    if (!typeGroups[n.type]) typeGroups[n.type] = [];
-    typeGroups[n.type].push(n);
-  });
 
   const total = nodes.length;
   nodes.forEach((node, i) => {
     const angle = (i / total) * 2 * Math.PI - Math.PI / 2;
-    // Vary radius by strength — stronger connections closer
-    const radius = 140 + (10 - node.strength) * 8;
+    const radius = 110 + (10 - node.strength) * 5;
     positions[node.id] = {
       x: cx + radius * Math.cos(angle),
       y: cy + radius * Math.sin(angle),
@@ -140,12 +132,13 @@ function computeLayout(nodes, width = 700, height = 500) {
 
 // ── WEB CANVAS ────────────────────────────────────────────
 function WebCanvas({ webData, selectedNode, onSelectNode }) {
-  const W = 760, H = 520;
+  const W = 560, H = 420;
   const positions = computeLayout(webData.nodes, W, H);
   const cx = W / 2, cy = H / 2;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }}>
+    <div style={{ overflowX: "auto", overflowY: "hidden", WebkitOverflowScrolling: "touch" }}>
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", minWidth: 340, height: "auto", display: "block" }}>
       <defs>
         <marker id="arrowW" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
           <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
@@ -192,13 +185,13 @@ function WebCanvas({ webData, selectedNode, onSelectNode }) {
       <g
         onClick={() => onSelectNode(selectedNode === "CENTER" ? null : "CENTER")}
         style={{ cursor: "pointer" }}>
-        <circle cx={cx} cy={cy} r={42}
+        <circle cx={cx} cy={cy} r={34}
           fill={selectedNode === "CENTER" ? "#1c1917" : "#fff"}
           stroke="#1c1917" strokeWidth={1.5} />
-        <circle cx={cx} cy={cy} r={50} fill="none" stroke="#1c1917" strokeWidth={0.5} opacity={0.3} />
+        <circle cx={cx} cy={cy} r={40} fill="none" stroke="#1c1917" strokeWidth={0.5} opacity={0.3} />
         <text
           x={cx} y={cy - 6} textAnchor="middle"
-          style={{ fontSize: 11, fontWeight: 600, fill: selectedNode === "CENTER" ? "#fff" : "#1c1917", fontFamily: "'Inter',sans-serif" }}>
+          style={{ fontSize: 10, fontWeight: 600, fill: selectedNode === "CENTER" ? "#fff" : "#1c1917", fontFamily: "'Inter',sans-serif" }}>
           {webData.centralTopic.split(" ").slice(0, 2).join(" ")}
         </text>
         <text
@@ -223,7 +216,7 @@ function WebCanvas({ webData, selectedNode, onSelectNode }) {
           (l.from === node.id && (l.to === selectedNode || l.to === "CENTER" && selectedNode === "CENTER")) ||
           (l.to === node.id && (l.from === selectedNode || l.from === "CENTER" && selectedNode === "CENTER"))
         );
-        const r = 28 + node.strength * 1.5;
+        const r = 22 + node.strength * 1.0;
         const opacity = selectedNode && !isSel && !isLinked ? 0.3 : 1;
 
         return (
@@ -236,11 +229,11 @@ function WebCanvas({ webData, selectedNode, onSelectNode }) {
             <circle cx={pos.x + r - 7} cy={pos.y - r + 7} r={4}
               fill={ts.dot} opacity={isSel ? 0 : 1} />
             <text x={pos.x} y={pos.y - 4} textAnchor="middle"
-              style={{ fontSize: 9.5, fontWeight: 600, fill: isSel ? "#fff" : ts.text, fontFamily: "'Inter',sans-serif" }}>
+              style={{ fontSize: 8.5, fontWeight: 600, fill: isSel ? "#fff" : ts.text, fontFamily: "'Inter',sans-serif" }}>
               {node.label.split(" ").slice(0, 2).join(" ")}
             </text>
             <text x={pos.x} y={pos.y + 7} textAnchor="middle"
-              style={{ fontSize: 9.5, fontWeight: 600, fill: isSel ? "#fff" : ts.text, fontFamily: "'Inter',sans-serif" }}>
+              style={{ fontSize: 8.5, fontWeight: 600, fill: isSel ? "#fff" : ts.text, fontFamily: "'Inter',sans-serif" }}>
               {node.label.split(" ").slice(2, 4).join(" ")}
             </text>
             <text x={pos.x} y={pos.y + 19} textAnchor="middle"
@@ -251,6 +244,7 @@ function WebCanvas({ webData, selectedNode, onSelectNode }) {
         );
       })}
     </svg>
+    </div>
   );
 }
 
@@ -389,6 +383,9 @@ export default function StoryWeb() {
         @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
         @keyframes prog{0%{transform:translateX(-100%)}100%{transform:translateX(200%)}}
         @keyframes spin{to{transform:rotate(360deg)}}
+        .web-main-grid{display:grid;grid-template-columns:minmax(0,1fr);gap:1.25rem;}
+        @media(min-width:700px){.web-main-grid{grid-template-columns:1fr 300px;}}
+        .web-node-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;}
       `}</style>
 
       {/* Header */}
@@ -406,7 +403,7 @@ export default function StoryWeb() {
           </p>
 
           {/* Search */}
-          <div style={{ display: "flex", gap: 0, maxWidth: 620, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.15)", borderRadius: 12, overflow: "hidden", marginBottom: 10 }}>
+          <div style={{ display: "flex", gap: 0, width: "100%", maxWidth: 620, background: "rgba(255,255,255,.06)", border: "1px solid rgba(255,255,255,.15)", borderRadius: 12, overflow: "hidden", marginBottom: 10 }}>
             <input
               value={topic}
               onChange={e => setTopic(e.target.value)}
@@ -478,7 +475,7 @@ export default function StoryWeb() {
                 <div style={{ fontSize: 12, color: "#a8a29e" }}>{webData.nodes.length} connected nodes · click any to explore</div>
               </div>
               {/* Filter */}
-              <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 5, flexWrap: "wrap", maxWidth: "100%" }}>
                 {["ALL", "CAUSE", "EFFECT", "RELATED", "CONTEXT", "PERSON", "POLICY"].map(type => {
                   const ts = type === "ALL" ? { dot: "#1c1917", bg: "#f5f4f2", text: "#1c1917", border: "#e8e6e1" } : getTypeStyle(type);
                   return (
@@ -491,8 +488,8 @@ export default function StoryWeb() {
               </div>
             </div>
 
-            {/* Main grid */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: "1.25rem", alignItems: "start" }}>
+            {/* Main grid — responsive */}
+            <div className="web-main-grid" style={{ alignItems: "start" }}>
 
               {/* Canvas */}
               <div style={{ background: "#fff", border: "1px solid #e8e6e1", borderRadius: 14, overflow: "hidden" }}>
@@ -513,8 +510,8 @@ export default function StoryWeb() {
                 </div>
               </div>
 
-              {/* Side panel */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {/* Side panel — full width on mobile */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, minWidth: 0 }}>
                 <NodeDetail
                   node={selectedNodeData}
                   webData={webData}
@@ -542,7 +539,7 @@ export default function StoryWeb() {
             {/* Node list below */}
             <div style={{ marginTop: "1.5rem" }}>
               <div style={{ fontSize: 13, fontWeight: 600, color: "#1c1917", marginBottom: "0.75rem" }}>All connected nodes</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(200px,1fr))", gap: 8 }}>
+              <div className="web-node-grid">
                 {filteredWeb.nodes.map(node => {
                   const ts = getTypeStyle(node.type);
                   return (
@@ -573,7 +570,7 @@ export default function StoryWeb() {
               Every story has causes before it, effects after it, people driving it, and policies shaping it. The Story Web shows them all at once.
             </div>
             <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", fontSize: 12.5, color: "#57534e" }}>
-              {["🔴Causes", "🟢 Effects", "🔵 Related", "🟡 Context", "🟣 People", "🩵 Policies"].map(f => (
+              {["🔴 Causes", "🟢 Effects", "🔵 Related", "🟡 Context", "🟣 People", "🩵 Policies"].map(f => (
                 <span key={f} style={{ padding: "5px 12px", borderRadius: 100, background: "#f5f4f2", border: "1px solid #e8e6e1" }}>{f}</span>
               ))}
             </div>
