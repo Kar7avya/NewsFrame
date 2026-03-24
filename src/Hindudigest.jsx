@@ -586,6 +586,205 @@ function NewspaperUpload() {
 }
 
 
+
+// ── LINK EXPLAINER ────────────────────────────────────────
+const LINK_PROMPT = `You are a brilliant teacher. The user has pasted a news article URL. Based on the URL and any content provided, explain this article completely.
+
+If actual article content is provided, use it. If only URL is provided, explain based on what the URL suggests.
+
+Use EXACTLY this format:
+
+===ARTICLE_START===
+ARTICLE_NUM: 1
+SECTION: [National/World/Economy/Editorial/Science/Sports/Environment]
+HEADLINE: [The article headline — extract from URL or content]
+PAGE: Online
+IMPORTANCE: [High/Medium/Low]
+UPSC_PAPER: [GS1/GS2/GS3/GS4/Prelims/Not relevant]
+UPSC_TOPIC: [specific syllabus topic]
+
+WHAT_IS_IT:
+[2 sentences in very simple language — what is this article about]
+
+KEY_POINTS:
+• [Key point 1 — most important fact]
+• [Key point 2]
+• [Key point 3 — background/cause]
+• [Key point 4 — impact]
+• [Key point 5 — government response or expert view]
+• [Key point 6 — way forward]
+• [Key point 7 — UPSC angle]
+
+ONE_LINE: [One sentence a 12-year-old understands]
+
+DIFFICULT_WORDS:
+• [hard word] → [simple meaning]
+• [hard word] → [simple meaning]
+• [hard word] → [simple meaning]
+
+UPSC_CONNECT:
+[How to use this in UPSC prep — 2 sentences]
+
+FOLLOW_UP:
+• [Related topic to study]
+• [Related topic to study]
+===ARTICLE_END===`;
+
+function LinkExplainer() {
+  const [url, setUrl] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [articles, setArticles] = useState([]);
+  const [error, setError] = useState("");
+  const [statusMsg, setStatusMsg] = useState("");
+  const statusRef = useRef(null);
+
+  const STATUS = ["Fetching article...","Reading content...","Breaking into key points...","Adding UPSC connections...","Almost done..."];
+
+  async function explain() {
+    if (!url.trim()) return;
+    setLoading(true); setArticles([]); setError("");
+    let mi = 0; setStatusMsg(STATUS[0]);
+    statusRef.current = setInterval(() => { if (++mi < STATUS.length) setStatusMsg(STATUS[mi]); }, 2000);
+
+    try {
+      // Try to fetch article content via allorigins proxy
+      let articleContent = "";
+      try {
+        setStatusMsg("Fetching article content...");
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl);
+        const data = await res.json();
+        if (data.contents) {
+          // Strip HTML tags to get plain text
+          const text = data.contents
+            .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+            .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 3000);
+          articleContent = text;
+        }
+      } catch(e) {
+        console.warn("Could not fetch article content:", e.message);
+      }
+
+      setStatusMsg("Explaining with AI...");
+      const userMsg = articleContent
+        ? `URL: ${url}\n\nARTICLE CONTENT:\n${articleContent}\n\nExplain this article in full key points.`
+        : `URL: ${url}\n\nI could not fetch the full content. Based on the URL, explain what this article is likely about and provide key points.`;
+
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          max_tokens: 2500,
+          temperature: 0.3,
+          messages: [
+            { role: "system", content: LINK_PROMPT },
+            { role: "user", content: userMsg },
+          ],
+        }),
+      });
+
+      clearInterval(statusRef.current); setLoading(false); setStatusMsg("");
+      if (!res.ok) {
+        const e = await res.json().catch(() => ({}));
+        if (res.status === 429) throw new Error("Rate limit — wait 30 seconds");
+        throw new Error(e.error?.message || `Error ${res.status}`);
+      }
+
+      const data = await res.json();
+      const parsed = parseArticles(data.choices[0].message.content);
+      if (parsed.length === 0) throw new Error("Could not parse article — try a different link");
+      // Attach real URL
+      parsed.forEach(a => { a.realUrl = url; });
+      setArticles(parsed);
+    } catch(e) {
+      clearInterval(statusRef.current); setLoading(false); setStatusMsg("");
+      setError(e.message);
+    }
+  }
+
+  const SAMPLE_LINKS = [
+    "https://www.thehindu.com/news/national/",
+    "https://www.thehindu.com/business/",
+    "https://www.thehindu.com/opinion/editorial/",
+  ];
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      {/* URL input */}
+      <div style={{background:"#fff",border:"1px solid #e8e6e1",borderRadius:14,padding:"1.25rem 1.4rem"}}>
+        <div style={{fontSize:10,fontFamily:"'JetBrains Mono',monospace",color:"#a8a29e",textTransform:"uppercase",letterSpacing:".08em",marginBottom:10}}>Paste any news article link</div>
+        <div style={{display:"flex",gap:8,marginBottom:10}}>
+          <input
+            value={url}
+            onChange={e => setUrl(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && explain()}
+            placeholder="https://www.thehindu.com/news/..."
+            style={{flex:1,padding:"10px 14px",border:"1px solid #e8e6e1",borderRadius:10,fontSize:13,outline:"none",fontFamily:"'Inter',sans-serif",background:"#fafaf9"}}
+          />
+          <button onClick={explain} disabled={loading || !url.trim()}
+            style={{padding:"10px 20px",background:loading||!url.trim()?"#a8a29e":"#1c1917",color:"#fff",border:"none",borderRadius:10,fontSize:13,fontWeight:600,cursor:loading||!url.trim()?"not-allowed":"pointer",whiteSpace:"nowrap"}}>
+            {loading ? "Explaining..." : "Explain →"}
+          </button>
+        </div>
+        <div style={{fontSize:12,color:"#a8a29e",lineHeight:1.6}}>
+          Works with: The Hindu · TOI · BBC · NDTV · Indian Express · any news URL
+        </div>
+        {/* Quick paste buttons */}
+        <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
+          {SAMPLE_LINKS.map(link => (
+            <button key={link} onClick={() => setUrl(link)}
+              style={{fontSize:11,padding:"3px 11px",borderRadius:100,border:"1px solid #e8e6e1",background:"#f5f4f2",color:"#57534e",cursor:"pointer"}}>
+              {link.includes("national") ? "📰 National" : link.includes("business") ? "📈 Business" : "✒️ Editorial"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Status */}
+      {loading && statusMsg && (
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:10,fontSize:13,color:"#1d4ed8"}}>
+          <div style={{width:8,height:8,borderRadius:"50%",background:"#1d4ed8",animation:"pulse 1.4s infinite",flexShrink:0}} />
+          {statusMsg}
+        </div>
+      )}
+
+      {/* Error */}
+      {error && (
+        <div style={{background:"#fef2f2",border:"1px solid #fca5a5",borderRadius:10,padding:"1rem",fontSize:13,color:"#b91c1c",lineHeight:1.7}}>
+          <strong>Error:</strong> {error}
+          <button onClick={explain} style={{marginLeft:10,fontSize:12,padding:"2px 10px",borderRadius:100,border:"1px solid #fca5a5",background:"#fff",color:"#b91c1c",cursor:"pointer"}}>Retry</button>
+        </div>
+      )}
+
+      {/* Results */}
+      {articles.length > 0 && (
+        <div style={{animation:"fadeUp .4s ease"}}>
+          <div style={{fontSize:13,fontWeight:600,color:"#1c1917",marginBottom:10}}>
+            Article explained — <a href={url} target="_blank" rel="noopener noreferrer" style={{fontSize:12,color:"#1d4ed8",textDecoration:"none",fontWeight:400}}>open original ↗</a>
+          </div>
+          {articles.map((a, i) => <ArticleCard key={i} article={a} index={i} />)}
+        </div>
+      )}
+
+      {/* Empty hint */}
+      {!loading && articles.length === 0 && !error && (
+        <div style={{textAlign:"center",padding:"3rem 2rem",background:"#fff",border:"1px solid #e8e6e1",borderRadius:14}}>
+          <div style={{fontSize:40,marginBottom:12}}>🔗</div>
+          <div style={{fontFamily:"'Instrument Serif',serif",fontSize:"1.3rem",color:"#1c1917",marginBottom:8}}>Paste any news link</div>
+          <div style={{fontSize:13,color:"#a8a29e",lineHeight:1.8,maxWidth:380,margin:"0 auto"}}>
+            Copy a link from The Hindu, TOI, BBC or any news site → paste above → get full key point explanation instantly
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Calendar({ selectedDate, onSelect }) {
   const [view, setView] = useState(new Date(selectedDate));
   const today = new Date();
@@ -772,7 +971,7 @@ function Skeleton() {
 }
 
 export default function HinduDigest() {
-  const [mode, setMode] = useState("calendar"); // calendar | upload
+  const [mode, setMode] = useState("calendar"); // calendar | upload | link
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [section, setSection] = useState("all");
   const [loading, setLoading] = useState(false);
@@ -889,10 +1088,18 @@ export default function HinduDigest() {
             📸 Upload Newspaper
             <span style={{fontSize:10,background:mode==="upload"?"rgba(255,255,255,.2)":"#eff6ff",color:mode==="upload"?"#fff":"#1d4ed8",padding:"1px 6px",borderRadius:100,fontWeight:700}}>NEW</span>
           </button>
+          <button onClick={()=>setMode("link")}
+            style={{padding:"10px 22px",borderRadius:100,border:`1.5px solid ${mode==="link"?"#15803d":"#e8e6e1"}`,background:mode==="link"?"#15803d":"#fff",color:mode==="link"?"#fff":"#57534e",fontSize:13,fontWeight:500,cursor:"pointer",display:"flex",alignItems:"center",gap:7,transition:"all .15s"}}>
+            🔗 Paste Link
+            <span style={{fontSize:10,background:mode==="link"?"rgba(255,255,255,.2)":"#f0fdf4",color:mode==="link"?"#fff":"#15803d",padding:"1px 6px",borderRadius:100,fontWeight:700}}>NEW</span>
+          </button>
         </div>
 
         {/* Upload mode */}
         {mode === "upload" && <NewspaperUpload />}
+
+        {/* Link mode */}
+        {mode === "link" && <LinkExplainer />}
 
         {/* Calendar mode */}
         {mode === "calendar" && <div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:"1.5rem",alignItems:"start"}}>
