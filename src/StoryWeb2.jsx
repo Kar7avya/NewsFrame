@@ -77,8 +77,10 @@ RULES:
 - Include at least 1 global/international connection
 - CAUSE nodes come BEFORE the central topic, EFFECT nodes come AFTER
 - Timeline events MUST be in chronological order oldest to newest
-- Include specific dates/months where known
-- Last timeline event should be current status`;
+- TODAY IS MARCH 2026 — include events up to March 2026
+- Last timeline event MUST be the current status as of March 2026
+- Include specific months and years for each event
+- Do NOT stop at 2024 — include 2025 and 2026 developments`;
 
 // ── PARSER ────────────────────────────────────────────────
 function parseWeb(text) {
@@ -107,21 +109,23 @@ function parseWeb(text) {
     return { from: g("FROM"), to: g("TO"), label: g("LABEL") };
   }).filter(l => l.from && l.to);
 
-  // Parse timeline
+  // Parse timeline — fixed regex
   const timelineBlock = text.split("===TIMELINE_START===")[1]?.split("===TIMELINE_END===")[0] || "";
   const timeline = [];
-  let i = 1;
-  while (true) {
-    const dateM = timelineBlock.match(new RegExp(`TIMELINE_EVENT_${i}_DATE:\s*(.+)`));
-    if (!dateM) break;
-    const tg = key => { const m = timelineBlock.match(new RegExp(key + ":\s*(.+)")); return m ? m[1].trim() : ""; };
-    timeline.push({
-      date:  dateM[1].trim(),
-      title: tg(`TIMELINE_EVENT_${i}_TITLE`),
-      desc:  tg(`TIMELINE_EVENT_${i}_DESC`),
-      type:  tg(`TIMELINE_EVENT_${i}_TYPE`),
-    });
-    i++;
+  for (let ti = 1; ti <= 15; ti++) {
+    const dLine = timelineBlock.split("\n").find(l => l.startsWith("TIMELINE_EVENT_" + ti + "_DATE:"));
+    if (!dLine) break;
+    const getField = (field) => {
+      const line = timelineBlock.split("\n").find(l => l.startsWith("TIMELINE_EVENT_" + ti + "_" + field + ":"));
+      return line ? line.slice(line.indexOf(":") + 1).trim() : "";
+    };
+    const entry = {
+      date:  dLine.slice(dLine.indexOf(":") + 1).trim(),
+      title: getField("TITLE"),
+      desc:  getField("DESC"),
+      type:  getField("TYPE"),
+    };
+    if (entry.title) timeline.push(entry);
   }
 
   return {
@@ -459,6 +463,332 @@ function NodeDetail({ node, webData, isCenter }) {
   );
 }
 
+
+// ── SPEECH PRACTICE ──────────────────────────────────────
+async function generateScript(topic, webData) {
+  const nodesSummary = webData.nodes.slice(0,6).map(n => `${n.label}: ${n.simpleLink}`).join("\n");
+  const timelineSummary = webData.timeline?.slice(0,5).map(e => `${e.date}: ${e.title}`).join("\n") || "";
+
+  const prompt = `You are a public speaking coach. Generate a 2-minute spoken speech script about this news topic for someone to practice speaking in front of a camera.
+
+Topic: "${topic}"
+
+Key connections:
+${nodesSummary}
+
+Key timeline:
+${timelineSummary}
+
+Generate a natural, engaging spoken script — NOT a formal essay. It should sound like a smart person talking confidently.
+
+Format EXACTLY:
+
+SCRIPT_TITLE: [Catchy title for this speech — 5-7 words]
+SCRIPT_DURATION: 2 minutes
+SCRIPT_DIFFICULTY: [Beginner/Intermediate/Advanced]
+
+HOOK:
+[2-3 sentences — start with a surprising fact or question that grabs attention instantly]
+
+BACKGROUND:
+[3-4 sentences — give context, what led to this situation]
+
+MAIN_POINT_1:
+[3-4 sentences — first key point with specific facts]
+
+MAIN_POINT_2:
+[3-4 sentences — second key point, a different angle]
+
+MAIN_POINT_3:
+[3-4 sentences — third key point, impact or consequence]
+
+GLOBAL_INDIA:
+[2-3 sentences — how India is affected or connected]
+
+CONCLUSION:
+[2-3 sentences — wrap up with a memorable closing thought or call to action]
+
+SPEAKING_TIPS:
+• [Tip 1 — specific to this topic]
+• [Tip 2 — body language or delivery tip]
+• [Tip 3 — how to handle a difficult word or concept in this speech]
+
+KEY_WORDS_TO_EMPHASIZE: [5-6 important words from the speech to stress]
+PAUSE_POINTS: [Mention after which section to pause for effect]`;
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile", max_tokens: 2000, temperature: 0.5,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error("API error " + res.status);
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+function parseScript(text) {
+  const get = key => {
+    const m = text.match(new RegExp(key + ":\s*(.+)"));
+    return m ? m[1].trim() : "";
+  };
+  const getBlock = key => {
+    const idx = text.indexOf(key + ":");
+    if (idx === -1) return "";
+    const after = text.slice(idx + key.length + 1);
+    const end = after.search(/\n[A-Z_]+:/);
+    return (end === -1 ? after : after.slice(0, end)).trim();
+  };
+  const getBullets = key => {
+    return getBlock(key).split("\n")
+      .map(l => l.replace(/^[•\-*]\s*/, "").trim())
+      .filter(l => l.length > 5);
+  };
+
+  const sections = [
+    { key: "HOOK", label: "Hook", icon: "🎯", color: "#ef4444" },
+    { key: "BACKGROUND", label: "Background", icon: "📖", color: "#3b82f6" },
+    { key: "MAIN_POINT_1", label: "Main Point 1", icon: "1️⃣", color: "#8b5cf6" },
+    { key: "MAIN_POINT_2", label: "Main Point 2", icon: "2️⃣", color: "#8b5cf6" },
+    { key: "MAIN_POINT_3", label: "Main Point 3", icon: "3️⃣", color: "#8b5cf6" },
+    { key: "GLOBAL_INDIA", label: "India Connection", icon: "🇮🇳", color: "#f97316" },
+    { key: "CONCLUSION", label: "Conclusion", icon: "🎬", color: "#22c55e" },
+  ].map(s => ({ ...s, text: getBlock(s.key) })).filter(s => s.text);
+
+  return {
+    title:       get("SCRIPT_TITLE"),
+    duration:    get("SCRIPT_DURATION"),
+    difficulty:  get("SCRIPT_DIFFICULTY"),
+    sections,
+    tips:        getBullets("SPEAKING_TIPS"),
+    keyWords:    get("KEY_WORDS_TO_EMPHASIZE"),
+    pausePoints: get("PAUSE_POINTS"),
+    fullScript:  sections.map(s => s.text).join("\n\n"),
+  };
+}
+
+function SpeechPractice({ webData, topic }) {
+  const [script, setScript]       = useState(null);
+  const [loading, setLoading]     = useState(false);
+  const [error, setError]         = useState("");
+  const [editMode, setEditMode]   = useState(false);
+  const [editedSections, setEditedSections] = useState({});
+  const [activeSection, setActiveSection]   = useState(0);
+  const [practicing, setPracticing]         = useState(false);
+  const [timer, setTimer]         = useState(0);
+  const timerRef = useRef(null);
+
+  async function generate() {
+    setLoading(true); setError(""); setScript(null); setEditedSections({});
+    try {
+      const text = await generateScript(topic, webData);
+      setScript(parseScript(text));
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  function togglePractice() {
+    if (practicing) {
+      clearInterval(timerRef.current);
+      setPracticing(false);
+    } else {
+      setPracticing(true);
+      setTimer(0);
+      timerRef.current = setInterval(() => setTimer(t => t + 1), 1000);
+    }
+  }
+
+  function formatTime(s) {
+    return `${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
+  }
+
+  function getSectionText(i) {
+    return editedSections[i] !== undefined ? editedSections[i] : script?.sections[i]?.text || "";
+  }
+
+  function getFullScript() {
+    return script?.sections.map((s,i) => getSectionText(i)).join("\n\n") || "";
+  }
+
+  if (!script && !loading) return (
+    <div style={{ textAlign: "center", padding: "2.5rem 1rem" }}>
+      <div style={{ fontSize: 44, marginBottom: 12 }}>🎤</div>
+      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "1.3rem", color: "#1c1917", marginBottom: 8 }}>Practice speaking about this topic</div>
+      <div style={{ fontSize: 13.5, color: "#a8a29e", lineHeight: 1.75, maxWidth: 420, margin: "0 auto 20px" }}>
+        Get a 2-minute speech script based on this story web. Read it in front of your camera, edit it in your own words, and build your public speaking confidence.
+      </div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginBottom: 20, fontSize: 12.5, color: "#57534e" }}>
+        {["📝 Editable script", "⏱️ Built-in timer", "💡 Speaking tips", "🎯 Section by section"].map(f => (
+          <span key={f} style={{ padding: "4px 12px", borderRadius: 100, background: "#f5f4f2", border: "1px solid #e8e6e1" }}>{f}</span>
+        ))}
+      </div>
+      {error && <div style={{ color: "#b91c1c", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      <button onClick={generate}
+        style={{ padding: "11px 28px", background: "#1c1917", color: "#fff", border: "none", borderRadius: 100, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+        🎤 Generate Speech Script →
+      </button>
+    </div>
+  );
+
+  if (loading) return (
+    <div style={{ textAlign: "center", padding: "2.5rem" }}>
+      <div style={{ width: 36, height: 36, border: "3px solid #e8e6e1", borderTop: "3px solid #1c1917", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 12px" }}/>
+      <div style={{ fontSize: 13, color: "#a8a29e" }}>Writing your speech script...</div>
+    </div>
+  );
+
+  return (
+    <div style={{ animation: "fadeUp .3s ease" }}>
+      {/* Header bar */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14, flexWrap: "wrap" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "1.15rem", color: "#1c1917" }}>{script.title}</div>
+          <div style={{ fontSize: 11.5, color: "#a8a29e", marginTop: 2 }}>
+            {script.duration} · {script.difficulty} · {script.sections.length} sections
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          {/* Timer */}
+          <button onClick={togglePractice}
+            style={{ padding: "7px 14px", borderRadius: 100, border: `1.5px solid ${practicing?"#ef4444":"#1c1917"}`, background: practicing?"#fef2f2":"#1c1917", color: practicing?"#b91c1c":"#fff", fontSize: 12, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+            {practicing ? `⏹ Stop ${formatTime(timer)}` : "▶ Start Timer"}
+          </button>
+          {/* Edit toggle */}
+          <button onClick={() => setEditMode(e => !e)}
+            style={{ padding: "7px 14px", borderRadius: 100, border: `1.5px solid ${editMode?"#1d4ed8":"#e8e6e1"}`, background: editMode?"#1d4ed8":"#fff", color: editMode?"#fff":"#57534e", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+            {editMode ? "✓ Done editing" : "✏️ Edit script"}
+          </button>
+          {/* Regenerate */}
+          <button onClick={generate}
+            style={{ padding: "7px 14px", borderRadius: 100, border: "1px solid #e8e6e1", background: "#f5f4f2", color: "#57534e", fontSize: 12, cursor: "pointer" }}>
+            🔄
+          </button>
+        </div>
+      </div>
+
+      {/* Timer bar */}
+      {practicing && (
+        <div style={{ background: "#fef2f2", border: "1px solid #fecaca", borderRadius: 10, padding: "10px 16px", marginBottom: 12, display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ width: 10, height: 10, borderRadius: "50%", background: "#ef4444", animation: "pulse 1s infinite" }} />
+          <span style={{ fontSize: 14, fontWeight: 600, fontFamily: "'JetBrains Mono',monospace", color: "#b91c1c" }}>{formatTime(timer)}</span>
+          <span style={{ fontSize: 12, color: "#b91c1c" }}>Recording in progress — speak clearly and confidently</span>
+          <div style={{ flex: 1, height: 3, background: "#fecaca", borderRadius: 100, overflow: "hidden" }}>
+            <div style={{ height: "100%", background: "#ef4444", width: `${Math.min((timer/120)*100,100)}%`, transition: "width 1s linear", borderRadius: 100 }} />
+          </div>
+          <span style={{ fontSize: 11, color: "#b91c1c" }}>{120-timer > 0 ? `${120-timer}s left` : "Time up!"}</span>
+        </div>
+      )}
+
+      {/* Section navigator */}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap", marginBottom: 12 }}>
+        {script.sections.map((s, i) => (
+          <button key={i} onClick={() => setActiveSection(i)}
+            style={{ padding: "5px 11px", borderRadius: 100, border: `1px solid ${activeSection===i?"#1c1917":"#e8e6e1"}`, background: activeSection===i?"#1c1917":"#fff", color: activeSection===i?"#fff":"#57534e", fontSize: 11, fontWeight: activeSection===i?600:400, cursor: "pointer" }}>
+            {s.icon} {s.label}
+          </button>
+        ))}
+        <button onClick={() => setActiveSection(-1)}
+          style={{ padding: "5px 11px", borderRadius: 100, border: `1px solid ${activeSection===-1?"#1d4ed8":"#e8e6e1"}`, background: activeSection===-1?"#1d4ed8":"#fff", color: activeSection===-1?"#fff":"#57534e", fontSize: 11, cursor: "pointer" }}>
+          📄 Full script
+        </button>
+      </div>
+
+      {/* Section content */}
+      {activeSection >= 0 && script.sections[activeSection] && (
+        <div style={{ background: "#fff", border: `1.5px solid ${script.sections[activeSection].color}30`, borderRadius: 12, overflow: "hidden", marginBottom: 12 }}>
+          <div style={{ padding: "10px 14px", background: `${script.sections[activeSection].color}10`, borderBottom: `1px solid ${script.sections[activeSection].color}20`, display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 16 }}>{script.sections[activeSection].icon}</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: script.sections[activeSection].color, textTransform: "uppercase", letterSpacing: ".05em" }}>{script.sections[activeSection].label}</span>
+            {!editMode && <span style={{ fontSize: 11, color: "#a8a29e", marginLeft: "auto" }}>click ✏️ to edit</span>}
+          </div>
+          <div style={{ padding: "14px 16px" }}>
+            {editMode ? (
+              <textarea
+                value={getSectionText(activeSection)}
+                onChange={e => setEditedSections(prev => ({...prev, [activeSection]: e.target.value}))}
+                style={{ width: "100%", minHeight: 140, padding: "10px 12px", border: "1px solid #bfdbfe", borderRadius: 8, fontSize: 14, lineHeight: 1.75, fontFamily: "'Inter',sans-serif", resize: "vertical", outline: "none", color: "#1c1917" }}
+              />
+            ) : (
+              <div style={{ fontSize: 14.5, color: "#1c1917", lineHeight: 1.85, whiteSpace: "pre-wrap" }}>
+                {getSectionText(activeSection)}
+              </div>
+            )}
+          </div>
+          {/* Navigation */}
+          <div style={{ padding: "8px 16px", borderTop: "1px solid #f1f0ec", display: "flex", justifyContent: "space-between" }}>
+            <button onClick={() => setActiveSection(i => Math.max(0, i-1))} disabled={activeSection===0}
+              style={{ padding: "5px 12px", borderRadius: 100, border: "1px solid #e8e6e1", background: "#fff", fontSize: 12, cursor: activeSection===0?"not-allowed":"pointer", opacity: activeSection===0?0.4:1, color: "#57534e" }}>
+              ← Previous
+            </button>
+            <span style={{ fontSize: 11, color: "#a8a29e", alignSelf: "center" }}>{activeSection+1} / {script.sections.length}</span>
+            <button onClick={() => setActiveSection(i => Math.min(script.sections.length-1, i+1))} disabled={activeSection===script.sections.length-1}
+              style={{ padding: "5px 12px", borderRadius: 100, border: "1px solid #e8e6e1", background: "#1c1917", color: "#fff", fontSize: 12, cursor: activeSection===script.sections.length-1?"not-allowed":"pointer", opacity: activeSection===script.sections.length-1?0.4:1 }}>
+              Next →
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Full script view */}
+      {activeSection === -1 && (
+        <div style={{ background: "#fff", border: "1px solid #e8e6e1", borderRadius: 12, padding: "16px", marginBottom: 12 }}>
+          {editMode ? (
+            <textarea
+              value={getFullScript()}
+              onChange={e => {
+                const parts = e.target.value.split("\n\n");
+                const newEdits = {};
+                parts.forEach((p, i) => { if (i < script.sections.length) newEdits[i] = p; });
+                setEditedSections(newEdits);
+              }}
+              style={{ width: "100%", minHeight: 400, padding: "10px 12px", border: "1px solid #bfdbfe", borderRadius: 8, fontSize: 13.5, lineHeight: 1.85, fontFamily: "'Inter',sans-serif", resize: "vertical", outline: "none", color: "#1c1917" }}
+            />
+          ) : (
+            <div style={{ fontSize: 14, color: "#1c1917", lineHeight: 1.9, whiteSpace: "pre-wrap" }}>
+              {script.sections.map((s, i) => (
+                <div key={i} style={{ marginBottom: 20 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: s.color, textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6, fontFamily: "'JetBrains Mono',monospace" }}>
+                    {s.icon} {s.label}
+                  </div>
+                  <div>{getSectionText(i)}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Tips + keywords */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 10 }}>
+        {script.tips?.length > 0 && (
+          <div style={{ background: "#eff6ff", border: "1px solid #bfdbfe", borderRadius: 10, padding: "12px 14px" }}>
+            <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "#1d4ed8", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 8 }}>💡 Speaking tips</div>
+            {script.tips.map((tip, i) => (
+              <div key={i} style={{ fontSize: 12.5, color: "#1e40af", lineHeight: 1.6, marginBottom: 5, display: "flex", gap: 6 }}><span>→</span>{tip}</div>
+            ))}
+          </div>
+        )}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {script.keyWords && (
+            <div style={{ background: "#fefce8", border: "1px solid #fde68a", borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "#92400e", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>🔑 Stress these words</div>
+              <div style={{ fontSize: 12.5, color: "#78350f", lineHeight: 1.6 }}>{script.keyWords}</div>
+            </div>
+          )}
+          {script.pausePoints && (
+            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: 10, padding: "12px 14px" }}>
+              <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "#15803d", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>⏸️ Pause here</div>
+              <div style={{ fontSize: 12.5, color: "#166534", lineHeight: 1.6 }}>{script.pausePoints}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── SAMPLE TOPICS ─────────────────────────────────────────
 const SAMPLES = [
   "India inflation",
@@ -480,7 +810,7 @@ export default function StoryWeb() {
   const [statusMsg,    setStatusMsg]    = useState("");
   const [selectedNode, setSelectedNode] = useState(null);
   const [filterType,   setFilterType]   = useState("ALL");
-  const [view,         setView]         = useState("web"); // web | timeline
+  const [view,         setView]         = useState("web"); // web | timeline | speech
   const statusRef = useRef(null);
 
   const STATUS = [
@@ -629,6 +959,11 @@ export default function StoryWeb() {
                   📅 Story Timeline
                   {webData.timeline?.length > 0 && <span style={{ fontSize: 10, background: view==="timeline"?"rgba(255,255,255,.25)":"#eff6ff", color: view==="timeline"?"#fff":"#1d4ed8", padding: "1px 6px", borderRadius: 100, fontWeight: 700 }}>{webData.timeline.length}</span>}
                 </button>
+                <button onClick={() => setView("speech")}
+                  style={{ padding: "6px 14px", borderRadius: 100, border: `1.5px solid ${view==="speech"?"#ef4444":"#e8e6e1"}`, background: view==="speech"?"#ef4444":"#fff", color: view==="speech"?"#fff":"#57534e", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+                  🎤 Speech Practice
+                  <span style={{ fontSize: 10, background: view==="speech"?"rgba(255,255,255,.25)":"#fef2f2", color: view==="speech"?"#fff":"#b91c1c", padding: "1px 6px", borderRadius: 100, fontWeight: 700 }}>NEW</span>
+                </button>
               </div>
 
               {/* Filter — only show in web view */}
@@ -649,6 +984,13 @@ export default function StoryWeb() {
             {view === "timeline" && (
               <div style={{ background: "#fff", border: "1px solid #e8e6e1", borderRadius: 14, padding: "1.25rem 1.4rem", marginBottom: "1.25rem" }}>
                 <StoryTimeline timeline={webData.timeline} topic={webData.centralTopic} />
+              </div>
+            )}
+
+            {/* Speech Practice view */}
+            {view === "speech" && (
+              <div style={{ background: "#fff", border: "1px solid #e8e6e1", borderRadius: 14, padding: "1.25rem 1.4rem", marginBottom: "1.25rem" }}>
+                <SpeechPractice webData={webData} topic={webData.centralTopic} />
               </div>
             )}
 
