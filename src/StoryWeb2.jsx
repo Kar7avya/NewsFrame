@@ -789,6 +789,289 @@ function SpeechPractice({ webData, topic }) {
   );
 }
 
+
+// ── MEMORY FLOWCHART ──────────────────────────────────────
+async function generateFlowchart(topic, webData) {
+  const causes = webData.nodes.filter(n => n.type === "CAUSE").slice(0,3).map(n => n.label).join(", ");
+  const effects = webData.nodes.filter(n => n.type === "EFFECT").slice(0,3).map(n => n.label).join(", ");
+  const timeline = webData.timeline?.slice(0,4).map(e => e.title).join(" → ") || "";
+
+  const prompt = `Create a memory flowchart for the topic: "${topic}"
+
+Causes: ${causes}
+Effects: ${effects}
+Key sequence: ${timeline}
+
+Generate a simple flowchart in this EXACT format — designed for easy memorization:
+
+FLOW_TITLE: [6-8 word title]
+
+STEP_1_LABEL: [3-4 words — root cause or trigger]
+STEP_1_TYPE: CAUSE
+STEP_1_MEMORY: [One memorable phrase — like a hook to remember this]
+
+STEP_2_LABEL: [3-4 words]
+STEP_2_TYPE: EVENT
+STEP_2_MEMORY: [memorable phrase]
+
+STEP_3_LABEL: [3-4 words — the central event]
+STEP_3_TYPE: CENTER
+STEP_3_MEMORY: [memorable phrase]
+
+STEP_4_LABEL: [3-4 words]
+STEP_4_TYPE: RESPONSE
+STEP_4_MEMORY: [memorable phrase]
+
+STEP_5_LABEL: [3-4 words — main effect]
+STEP_5_TYPE: EFFECT
+STEP_5_MEMORY: [memorable phrase]
+
+STEP_6_LABEL: [3-4 words — current situation]
+STEP_6_TYPE: CURRENT
+STEP_6_MEMORY: [memorable phrase]
+
+MEMORY_TRICK: [A single sentence mnemonic or memory trick to remember the whole flow]
+KEY_NUMBERS: [3-4 important numbers or statistics to remember from this topic]`;
+
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${GROQ_KEY}` },
+    body: JSON.stringify({
+      model: "llama-3.3-70b-versatile", max_tokens: 1000, temperature: 0.3,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!res.ok) throw new Error("API error " + res.status);
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+function parseFlowchart(text) {
+  const get = key => {
+    const m = text.match(new RegExp(key + ":\s*(.+)"));
+    return m ? m[1].trim() : "";
+  };
+  const steps = [];
+  for (let i = 1; i <= 8; i++) {
+    const label = get("STEP_" + i + "_LABEL");
+    if (!label) break;
+    steps.push({
+      label,
+      type:   get("STEP_" + i + "_TYPE"),
+      memory: get("STEP_" + i + "_MEMORY"),
+    });
+  }
+  return {
+    title:       get("FLOW_TITLE"),
+    steps,
+    memoryTrick: get("MEMORY_TRICK"),
+    keyNumbers:  get("KEY_NUMBERS"),
+  };
+}
+
+const FLOW_TYPE_STYLE = {
+  CAUSE:    { bg: "#fef2f2", border: "#fca5a5", text: "#991b1b", accent: "#ef4444" },
+  EVENT:    { bg: "#fefce8", border: "#fde047", text: "#854d0e", accent: "#eab308" },
+  CENTER:   { bg: "#1c1917", border: "#1c1917", text: "#fff",    accent: "#fff" },
+  RESPONSE: { bg: "#eff6ff", border: "#93c5fd", text: "#1e40af", accent: "#3b82f6" },
+  EFFECT:   { bg: "#f0fdf4", border: "#86efac", text: "#166534", accent: "#22c55e" },
+  CURRENT:  { bg: "#f5f3ff", border: "#c4b5fd", text: "#5b21b6", accent: "#8b5cf6" },
+};
+
+function MemoryFlowchart({ webData, topic }) {
+  const [chart, setChart]     = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState("");
+  const [revealed, setRevealed] = useState({});
+  const [quizMode, setQuizMode] = useState(false);
+  const [score, setScore]     = useState(0);
+  const [answered, setAnswered] = useState({});
+
+  async function generate() {
+    setLoading(true); setError(""); setChart(null);
+    setRevealed({}); setAnswered({}); setScore(0);
+    try {
+      const text = await generateFlowchart(topic, webData);
+      setChart(parseFlowchart(text));
+    } catch(e) { setError(e.message); }
+    setLoading(false);
+  }
+
+  function toggleReveal(i) {
+    setRevealed(prev => ({ ...prev, [i]: !prev[i] }));
+  }
+
+  function handleQuizAnswer(stepIdx, correct) {
+    if (answered[stepIdx] !== undefined) return;
+    setAnswered(prev => ({ ...prev, [stepIdx]: correct }));
+    if (correct) setScore(s => s + 1);
+  }
+
+  if (!chart && !loading) return (
+    <div style={{ textAlign: "center", padding: "2.5rem 1rem" }}>
+      <div style={{ fontSize: 44, marginBottom: 12 }}>🧠</div>
+      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "1.3rem", color: "#1c1917", marginBottom: 8 }}>
+        Memory flowchart
+      </div>
+      <div style={{ fontSize: 13.5, color: "#a8a29e", lineHeight: 1.75, maxWidth: 400, margin: "0 auto 20px" }}>
+        A visual step-by-step flow designed for easy memorization. Includes a memory trick and quiz mode to test yourself.
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap", marginBottom: 20, fontSize: 12.5, color: "#57534e" }}>
+        {["🔴 Causes → Events", "⚫ Central event", "🟢 Effects", "🧩 Memory trick", "📝 Quiz yourself"].map(f => (
+          <span key={f} style={{ padding: "4px 12px", borderRadius: 100, background: "#f5f4f2", border: "1px solid #e8e6e1" }}>{f}</span>
+        ))}
+      </div>
+      {error && <div style={{ color: "#b91c1c", fontSize: 13, marginBottom: 12 }}>{error}</div>}
+      <button onClick={generate}
+        style={{ padding: "11px 28px", background: "#1c1917", color: "#fff", border: "none", borderRadius: 100, fontSize: 14, fontWeight: 600, cursor: "pointer" }}>
+        🧠 Build Memory Flowchart →
+      </button>
+    </div>
+  );
+
+  if (loading) return (
+    <div style={{ textAlign: "center", padding: "2.5rem" }}>
+      <div style={{ width: 36, height: 36, border: "3px solid #e8e6e1", borderTop: "3px solid #1c1917", borderRadius: "50%", animation: "spin 1s linear infinite", margin: "0 auto 12px" }}/>
+      <div style={{ fontSize: 13, color: "#a8a29e" }}>Building memory flowchart...</div>
+    </div>
+  );
+
+  const totalAnswered = Object.keys(answered).length;
+
+  return (
+    <div style={{ animation: "fadeUp .3s ease" }}>
+      {/* Header */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: "1.1rem", color: "#1c1917" }}>{chart.title}</div>
+          <div style={{ fontSize: 11.5, color: "#a8a29e", marginTop: 2 }}>{chart.steps.length} steps · click any box to reveal memory hook</div>
+        </div>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button onClick={() => { setQuizMode(q => !q); setAnswered({}); setScore(0); }}
+            style={{ padding: "6px 14px", borderRadius: 100, border: `1.5px solid ${quizMode?"#1d4ed8":"#e8e6e1"}`, background: quizMode?"#1d4ed8":"#fff", color: quizMode?"#fff":"#57534e", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+            {quizMode ? `Quiz: ${score}/${totalAnswered}` : "📝 Quiz mode"}
+          </button>
+          <button onClick={() => setRevealed(Object.fromEntries(chart.steps.map((_,i)=>[i,true])))}
+            style={{ padding: "6px 14px", borderRadius: 100, border: "1px solid #e8e6e1", background: "#fff", color: "#57534e", fontSize: 12, cursor: "pointer" }}>
+            Show all
+          </button>
+          <button onClick={generate}
+            style={{ padding: "6px 12px", borderRadius: 100, border: "1px solid #e8e6e1", background: "#f5f4f2", color: "#57534e", fontSize: 12, cursor: "pointer" }}>
+            🔄
+          </button>
+        </div>
+      </div>
+
+      {/* Flowchart steps */}
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 0 }}>
+        {chart.steps.map((step, i) => {
+          const ts = FLOW_TYPE_STYLE[step.type] || FLOW_TYPE_STYLE.EVENT;
+          const isRevealed = revealed[i];
+          const isAnswered = answered[i] !== undefined;
+
+          return (
+            <div key={i} style={{ width: "100%", display: "flex", flexDirection: "column", alignItems: "center" }}>
+              {/* Step box */}
+              <div
+                onClick={() => !quizMode && toggleReveal(i)}
+                style={{
+                  width: "100%", maxWidth: 480,
+                  background: ts.bg,
+                  border: `2px solid ${ts.border}`,
+                  borderRadius: 12, padding: "14px 18px",
+                  cursor: quizMode ? "default" : "pointer",
+                  transition: "all .2s",
+                  boxShadow: step.type === "CENTER" ? "0 4px 20px rgba(0,0,0,.15)" : "none",
+                }}>
+                {/* Step label */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: isRevealed ? 8 : 0 }}>
+                  <div style={{ width: 28, height: 28, borderRadius: 8, background: ts.accent, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: step.type === "CENTER" ? "#1c1917" : "#fff", flexShrink: 0 }}>{i+1}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600, color: ts.text, flex: 1 }}>{step.label}</div>
+                  <div style={{ fontSize: 10, fontWeight: 600, color: ts.text, opacity: 0.6, textTransform: "uppercase", letterSpacing: ".05em" }}>{step.type}</div>
+                  {!quizMode && <div style={{ fontSize: 12, color: ts.text, opacity: 0.5 }}>{isRevealed ? "▲" : "▼"}</div>}
+                </div>
+
+                {/* Memory hook — revealed on click */}
+                {isRevealed && !quizMode && (
+                  <div style={{ padding: "8px 12px", background: "rgba(255,255,255,.5)", borderRadius: 8, fontSize: 13, color: ts.text, lineHeight: 1.6, borderLeft: `3px solid ${ts.accent}` }}>
+                    💡 {step.memory}
+                  </div>
+                )}
+
+                {/* Quiz mode */}
+                {quizMode && !isAnswered && (
+                  <div style={{ marginTop: 10 }}>
+                    <div style={{ fontSize: 12.5, color: ts.text, marginBottom: 8, opacity: 0.7 }}>What comes after this step?</div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {[
+                        chart.steps[i+1]?.label,
+                        chart.steps[Math.max(0,i-1)]?.label,
+                        chart.steps[(i+2)%chart.steps.length]?.label,
+                      ].filter(Boolean).map((opt, oi) => (
+                        <button key={oi} onClick={() => handleQuizAnswer(i, oi === 0)}
+                          style={{ padding: "5px 12px", borderRadius: 100, border: "1px solid", borderColor: ts.border, background: "rgba(255,255,255,.6)", color: ts.text, fontSize: 12, cursor: "pointer", fontFamily: "'Inter',sans-serif" }}>
+                          {opt}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Quiz answered */}
+                {quizMode && isAnswered && (
+                  <div style={{ marginTop: 8, fontSize: 13, color: answered[i] ? "#15803d" : "#b91c1c", fontWeight: 500 }}>
+                    {answered[i] ? "✓ Correct!" : "✗ " + (chart.steps[i+1]?.label || "end")}
+                  </div>
+                )}
+              </div>
+
+              {/* Arrow between steps */}
+              {i < chart.steps.length - 1 && (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", margin: "4px 0" }}>
+                  <div style={{ width: 2, height: 16, background: "#d1cec8" }} />
+                  <div style={{ width: 0, height: 0, borderLeft: "6px solid transparent", borderRight: "6px solid transparent", borderTop: "8px solid #d1cec8" }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Memory trick + key numbers */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginTop: 16 }}>
+        {chart.memoryTrick && (
+          <div style={{ background: "#1c1917", color: "#fff", borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "#60a5fa", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>🧩 Memory trick</div>
+            <div style={{ fontSize: 13, lineHeight: 1.65, fontWeight: 300 }}>{chart.memoryTrick}</div>
+          </div>
+        )}
+        {chart.keyNumbers && (
+          <div style={{ background: "#fefce8", border: "1px solid #fde68a", borderRadius: 12, padding: "12px 14px" }}>
+            <div style={{ fontSize: 10, fontFamily: "'JetBrains Mono',monospace", color: "#92400e", textTransform: "uppercase", letterSpacing: ".06em", marginBottom: 6 }}>📊 Key numbers</div>
+            <div style={{ fontSize: 13, color: "#78350f", lineHeight: 1.65 }}>{chart.keyNumbers}</div>
+          </div>
+        )}
+      </div>
+
+      {/* Quiz score summary */}
+      {quizMode && totalAnswered === chart.steps.filter((_,i) => i < chart.steps.length - 1).length && (
+        <div style={{ marginTop: 12, background: score >= chart.steps.length * 0.7 ? "#f0fdf4" : "#fef2f2", border: `1px solid ${score >= chart.steps.length * 0.7 ? "#bbf7d0" : "#fecaca"}`, borderRadius: 10, padding: "12px 16px", textAlign: "center" }}>
+          <div style={{ fontSize: 22, fontWeight: 700, color: score >= chart.steps.length * 0.7 ? "#15803d" : "#b91c1c", marginBottom: 4 }}>
+            {score}/{totalAnswered}
+          </div>
+          <div style={{ fontSize: 13, color: score >= chart.steps.length * 0.7 ? "#166534" : "#991b1b" }}>
+            {score >= chart.steps.length * 0.7 ? "Great memory! You know this story well." : "Keep practicing — try reading the flowchart again then retake."}
+          </div>
+          <button onClick={() => { setAnswered({}); setScore(0); }}
+            style={{ marginTop: 8, padding: "5px 14px", borderRadius: 100, border: "1px solid #e8e6e1", background: "#fff", fontSize: 12, cursor: "pointer", color: "#57534e" }}>
+            Retry quiz
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── SAMPLE TOPICS ─────────────────────────────────────────
 const SAMPLES = [
   "India inflation",
@@ -810,7 +1093,7 @@ export default function StoryWeb() {
   const [statusMsg,    setStatusMsg]    = useState("");
   const [selectedNode, setSelectedNode] = useState(null);
   const [filterType,   setFilterType]   = useState("ALL");
-  const [view,         setView]         = useState("web"); // web | timeline | speech
+  const [view,         setView]         = useState("web"); // web | timeline | speech | flowchart
   const statusRef = useRef(null);
 
   const STATUS = [
@@ -961,8 +1244,12 @@ export default function StoryWeb() {
                 </button>
                 <button onClick={() => setView("speech")}
                   style={{ padding: "6px 14px", borderRadius: 100, border: `1.5px solid ${view==="speech"?"#ef4444":"#e8e6e1"}`, background: view==="speech"?"#ef4444":"#fff", color: view==="speech"?"#fff":"#57534e", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
-                  🎤 Speech Practice
-                  <span style={{ fontSize: 10, background: view==="speech"?"rgba(255,255,255,.25)":"#fef2f2", color: view==="speech"?"#fff":"#b91c1c", padding: "1px 6px", borderRadius: 100, fontWeight: 700 }}>NEW</span>
+                  🎤 Speech
+                </button>
+                <button onClick={() => setView("flowchart")}
+                  style={{ padding: "6px 14px", borderRadius: 100, border: `1.5px solid ${view==="flowchart"?"#059669":"#e8e6e1"}`, background: view==="flowchart"?"#059669":"#fff", color: view==="flowchart"?"#fff":"#57534e", fontSize: 12, fontWeight: 500, cursor: "pointer", display: "flex", alignItems: "center", gap: 5 }}>
+                  🧠 Flowchart
+                  <span style={{ fontSize: 10, background: view==="flowchart"?"rgba(255,255,255,.25)":"#f0fdf4", color: view==="flowchart"?"#fff":"#15803d", padding: "1px 6px", borderRadius: 100, fontWeight: 700 }}>NEW</span>
                 </button>
               </div>
 
@@ -984,6 +1271,13 @@ export default function StoryWeb() {
             {view === "timeline" && (
               <div style={{ background: "#fff", border: "1px solid #e8e6e1", borderRadius: 14, padding: "1.25rem 1.4rem", marginBottom: "1.25rem" }}>
                 <StoryTimeline timeline={webData.timeline} topic={webData.centralTopic} />
+              </div>
+            )}
+
+            {/* Memory Flowchart view */}
+            {view === "flowchart" && (
+              <div style={{ background: "#fff", border: "1px solid #e8e6e1", borderRadius: 14, padding: "1.25rem 1.4rem", marginBottom: "1.25rem" }}>
+                <MemoryFlowchart webData={webData} topic={webData.centralTopic} />
               </div>
             )}
 
